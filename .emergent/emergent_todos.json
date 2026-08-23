@@ -1,0 +1,38 @@
+[
+  {
+    "content": "Fase 0: Bring-up lingkungan + gate.sh HIJAU baseline 55 gate",
+    "status": "completed"
+  },
+  {
+    "content": "Fase A: Tutup dokumentasi sesi #32 yang terputus (CHANGELOG [#32], INVARIANTS INV-F37, HANDOFF)",
+    "status": "completed"
+  },
+  {
+    "content": "Fase B: UKUR DULU — bukti data hidup untuk 3 fitur sesi #33",
+    "status": "completed"
+  },
+  {
+    "content": "Fase C: POC inti test_core_belanja_riwayat_ambang.py — 19/19 PASS, self-cleaning",
+    "status": "completed"
+  },
+  {
+    "content": "Fase D: Backend — core/shopping_list.py, core/material_cost_history.py, bulk-fill/bulk-clear 4 dasar, build_pr_doc SSOT, filter jenis aksesoris",
+    "status": "completed"
+  },
+  {
+    "content": "Fase E: Frontend — 3 layar + registry/nav + tautan silang + rebuild bundle",
+    "status": "in_progress"
+  },
+  {
+    "content": "Fase F: Gate INV-F38 (15 invarian) + gate.sh VERDICT HIJAU 56 gate",
+    "status": "completed"
+  },
+  {
+    "content": "Fase G: Penguji independen (testing_agent_v3) end-to-end 11 user story + perbaiki SEMUA temuan",
+    "status": "pending"
+  },
+  {
+    "content": "Fase H: Dokumentasi sesi #33 (plan.md, CHANGELOG, INVARIANTS, HANDOFF, test_credentials) + backup DB baru",
+    "status": "pending"
+  }
+]
