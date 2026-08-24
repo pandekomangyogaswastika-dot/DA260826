@@ -62,7 +62,8 @@ async def weekly_report(request: Request,
         raise HTTPException(400, str(e)) from None
     sent = {}
     for r in await db[RUNS].find(
-            {"week_end": data["period"]["end"]}, {"_id": 0}).to_list(1000):
+            {"week_end": data["period"]["end"]},
+            {"_id": 0, "body_text": 0, "subject": 0, "top_contents": 0}).to_list(1000):
         sent[r.get("creator_id")] = r
     for row in data["rows"]:
         run = sent.get(row["creator_id"])
@@ -81,7 +82,13 @@ async def send_weekly_report(body: SendIn, request: Request):
     """Kirim rapor pekan ini ke kreator (email). Idempoten per (kreator, pekan)."""
     user = await require_auth(request)
     db = get_db()
-    ids = body.creator_ids if body.creator_ids else await _scoped_creator_ids(db, user)
+    allowed = await _scoped_creator_ids(db, user)
+    if body.creator_ids and allowed is not None:
+        outside = [c for c in body.creator_ids if c not in allowed]
+        if outside:
+            raise HTTPException(403, f"{len(outside)} kreator di luar lingkup toko Anda — "
+                                     "rapor tidak dikirim.")
+    ids = body.creator_ids if body.creator_ids else allowed
     try:
         data = await wr.build_report(db, week_end=body.week_end or None, creator_ids=ids)
     except ValueError as e:

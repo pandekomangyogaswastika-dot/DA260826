@@ -545,11 +545,16 @@ function CreatorWeeklyCard({ token }) {
 
   // Kreator harus bisa membuka pekan yang rapornya DIKIRIM admin, bukan hanya
   // 7 hari terakhir dari hari ini — kalau tidak, rapor yang diterima lewat email
-  // tidak pernah bisa dicocokkan dengan layar.
+  // tidak pernah bisa dicocokkan dengan layar. Tetapi maju ke pekan yang BELUM
+  // terjadi dilarang: angka 0 di pekan masa depan akan dibaca sebagai "performa
+  // saya nol".
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const atCurrentWeek = weekEnd >= todayStr;
   const shiftWeek = (days) => {
     const d = new Date(`${weekEnd}T00:00:00`);
     d.setDate(d.getDate() + days);
-    setWeekEnd(d.toISOString().slice(0, 10));
+    const next = d.toISOString().slice(0, 10);
+    setWeekEnd(next > todayStr ? todayStr : next);
   };
 
   const r = data?.report;
@@ -562,8 +567,11 @@ function CreatorWeeklyCard({ token }) {
         <div className="flex items-center gap-1">
           <button onClick={() => shiftWeek(-7)} data-testid="creator-weekly-prev"
             className="px-2 py-1 rounded-lg border border-border text-[11px] text-foreground">‹ pekan lalu</button>
-          <button onClick={() => shiftWeek(7)} data-testid="creator-weekly-next"
-            className="px-2 py-1 rounded-lg border border-border text-[11px] text-foreground">pekan depan ›</button>
+          <button onClick={() => shiftWeek(7)} disabled={atCurrentWeek}
+            data-testid="creator-weekly-next"
+            className={`px-2 py-1 rounded-lg border border-border text-[11px] ${atCurrentWeek
+              ? 'text-muted-foreground opacity-40 cursor-not-allowed' : 'text-foreground'}`}>
+            pekan depan ›</button>
         </div>
       </div>
       <div className="text-[10px] text-muted-foreground">
@@ -589,6 +597,13 @@ function CreatorWeeklyCard({ token }) {
               </div>
             ))}
           </div>
+          {r.contents === 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-700"
+              data-testid="creator-weekly-idle">
+              Belum ada konten pada pekan ini — angka 0 di atas bukan berarti performa turun,
+              memang belum ada yang diposting.
+            </div>
+          )}
           {r.incentive_eligible && (
             <div className="rounded-lg border border-border px-3 py-2 text-xs">
               <div className="text-[10px] text-muted-foreground">

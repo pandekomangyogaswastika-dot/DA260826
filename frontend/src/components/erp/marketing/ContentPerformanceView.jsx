@@ -186,8 +186,17 @@ export default function ContentPerformanceView({ token }) {
           <Loader2 className="mx-auto animate-spin mb-2" size={18} /> Menghitung performa konten…
         </div>
       ) : !rows.length ? (
-        <div className="py-10 text-center text-muted-foreground text-sm" data-testid="perf-empty">
-          Belum ada konten pada rentang tanggal ini.
+        <div className="py-10 text-center text-sm" data-testid="perf-empty">
+          {data?.scope_empty ? (
+            <span className="text-amber-600">
+              Belum ada toko yang di-assign kepada akun Anda — layar ini kosong karena
+              kewenangan, bukan karena tidak ada konten. Minta admin meng-assign toko Anda.
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              Belum ada konten pada rentang tanggal ini.
+            </span>
+          )}
         </div>
       ) : perContent ? (
         <div className="rounded-lg border border-border overflow-x-auto bg-background">

@@ -331,6 +331,91 @@ def main() -> int:  # noqa: C901
             ok("B9", f"kreator tanpa konten tetap dilaporkan ({len(idle)} kreator) — "
                      "bukan disembunyikan dari rapat")
 
+        # ══ C. PAGAR MASUKAN & LINGKUP TOKO (temuan audit sesi #35) ═══════════
+        head("C — PAGAR MASUKAN KPI & LINGKUP TOKO pada jalur TULIS")
+
+        st, r = call("POST", f"/api/marketing/content-calendar/{c_kpi}/kpi", token,
+                     {"views": -5})
+        if st == 400 and "negatif" in json.dumps(r).lower():
+            ok("C1", "KPI negatif ditolak 400 — views/likes/pesanan/GMV tidak pernah minus")
+        else:
+            bad("C1", f"KPI negatif DITERIMA (HTTP {st})", det(r))
+
+        st, r = call("POST", f"/api/marketing/content-calendar/{c_kpi}/kpi", token,
+                     {"ctr": 250})
+        st2, r2 = call("POST", f"/api/marketing/content-calendar/{c_kpi}/kpi", token,
+                       {"views": 100, "likes": 900})
+        if st == 400 and st2 == 400:
+            ok("C2", "angka mustahil ditolak: CTR > 100% dan engagement > 3× views "
+                     "(gejala kolom views/likes tertukar)")
+        else:
+            bad("C2", f"angka mustahil diterima (CTR HTTP {st} · engagement HTTP {st2})",
+                det([r, r2]))
+
+        # KPI PARSIAL tidak boleh menghapus nilai lama (jebakan impor di masa depan)
+        st, r = call("POST", f"/api/marketing/content-calendar/{c_kpi}/kpi", token,
+                     {"views": 5000})
+        kpi_now = ((r or {}).get("data") or {}).get("kpi") or {}
+        if st != 200:
+            bad("C3", f"pengiriman KPI parsial gagal (HTTP {st})", det(r))
+        elif kpi_now.get("gmv") != 3_600_000 or kpi_now.get("orders") != 12:
+            bad("C3", "KPI parsial MENGHAPUS angka lain yang sudah benar "
+                      "(GMV/pesanan jadi nol)", det(kpi_now))
+        else:
+            ok("C3", f"kirim hanya 'views' → views jadi {kpi_now['views']:.0f} dan "
+                     f"GMV lama Rp {kpi_now['gmv']:.0f} TETAP (tidak terhapus)")
+
+        st, r = call("GET", "/api/marketing/content-calendar/performance/contents"
+                            f"?date_from={d_in}&date_to={d_in}&limit=1", token)
+        if st == 200 and r.get("truncated") and any("TERPOTONG" in n for n in r["data_notes"]):
+            ok("C4", "daftar yang terpotong MENGAKU terpotong — total di layar tidak "
+                     "pernah menyamar sebagai angka lengkap")
+        else:
+            bad("C4", "pemotongan daftar tidak diberitahukan (laporan tampak lengkap "
+                      "padahal bukan)", det({"truncated": r.get("truncated")}))
+
+        st, lg = call("POST", "/api/auth/login", None,
+                      {"email": "staffmkt@dewiaditya.id", "password": "Dewi@123"})
+        stok = (lg or {}).get("token")
+        if not stok:
+            bad("C5", f"login staf berlingkup toko gagal (HTTP {st}) — pagar tulis "
+                      "tidak bisa dibuktikan", det(lg))
+        else:
+            st, r = call("POST", f"/api/marketing/content-calendar/{c_kpi}/kpi", stok,
+                         {"views": 999})
+            if st == 403:
+                ok("C5", "staf TIDAK bisa menulis KPI konten di luar lingkup tokonya (403)")
+            elif st == 200:
+                bad("C5", "staf berhasil menulis KPI konten toko lain — angkanya ikut "
+                          "masuk rekap toko itu")
+            else:
+                bad("C5", f"jawaban tak terduga saat staf menulis KPI (HTTP {st})", det(r))
+
+            st, r = call("POST", "/api/marketing/kol/weekly-report/send", stok,
+                         {"creator_ids": [cid]})
+            st2, r2 = call("GET", f"/api/marketing/kol/weekly-report?creator_id={cid}", stok)
+            if st == 403 and st2 == 403:
+                ok("C6", "staf tidak bisa membaca/mengirim rapor kreator di luar "
+                         "lingkup tokonya (403)")
+            elif st == 200 or st2 == 200:
+                bad("C6", f"rapor kreator luar lingkup bisa diakses staf "
+                          f"(kirim HTTP {st} · baca HTTP {st2})")
+            else:
+                ok("C6", f"akses staf ke rapor kreator luar lingkup ditolak "
+                         f"(HTTP {st}/{st2})")
+
+            st, r = call("GET", "/api/marketing/content-calendar/performance/contents"
+                                f"?date_from={d_in}&date_to={d_in}", stok)
+            if st == 200 and r.get("scope_empty") and any("KEWENANGAN" in n for n in r["data_notes"]):
+                ok("C7", "layar kosong karena LINGKUP dibedakan dari kosong karena tidak "
+                         "ada data (penanda `scope_empty` + catatannya)")
+            elif st == 200 and r.get("rows"):
+                ok("C7", f"staf ini punya lingkup toko ({len(r['rows'])} baris) — kasus "
+                         "'kosong karena kewenangan' tidak berlaku untuknya")
+            else:
+                bad("C7", "layar kosong karena kewenangan tidak dibedakan dari data kosong",
+                    det({"scope_empty": r.get("scope_empty"), "notes": r.get("data_notes")}))
+
     finally:
         # ══ BERSIH-BERSIH: artefak uji tidak boleh tertinggal ═════════════════
         for entry_id in made:

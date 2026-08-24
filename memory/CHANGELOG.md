@@ -1,3 +1,34 @@
+# [2026-08-24 #35b] **AUDIT ULANG SESI #35** — 8 cacat ditemukan sendiri & ditutup
+
+Permintaan pemilik: *"recheck kembali development hari ini, doublecheck apakah ada bug atau cacat
+design, pastikan fungsionalitasnya aman, pastikan expected input output aman."* Audit kode + 3
+putaran uji UI tambahan (iteration_93/94/95) menemukan **8 cacat**; semuanya ditutup:
+
+| # | Cacat | Kenapa berbahaya | Perbaikan |
+|---|---|---|---|
+| 1 | `POST /content-calendar/{id}/kpi` **tanpa pagar lingkup toko** (hanya `require_auth`) | staf toko A bisa menulis KPI konten toko B ⇒ angkanya masuk rekap toko itu. Baru terpapar karena dialog "Isi KPI" adalah pemanggil pertama endpoint lama ini | `assert_account_visible()` ⇒ **403** |
+| 2 | KPI **negatif / CTR > 100% / engagement > 3× views / engagement tanpa views** diterima | laporan performa & keputusan insentif memakai angka mustahil | ditolak **400** dengan pesan yang menyebut dugaan sebabnya (mis. kolom views & likes tertukar) |
+| 3 | KPI **parsial menghapus angka lain** (semua field bawaan 0) | pengirim yang hanya membawa `views` diam-diam menghapus GMV/pesanan yang sudah benar — jebakan pasti meledak saat importir laporan konten dipasang | field `None` ⇒ **nilai lama dipertahankan**; layar mengirim `null` untuk kolom yang dikosongkan |
+| 4 | Daftar/rekap **terpotong senyap** (500 / 5.000 baris) | total di layar tampak lengkap padahal kurang dari kenyataan | flag `truncated` + catatan "DAFTAR TERPOTONG …" |
+| 5 | `POST /weekly-report/send` menerima `creator_ids` **bebas** | staf bisa mengirim rapor kreator di luar lingkup tokonya | **403**; `/weekly-report` & `/runs` juga dijaga |
+| 6 | daftar id lingkup kosong (`[]`) dibaca sebagai **"tidak menyaring"** | staf tanpa toko melihat SELURUH kreator (ditangkap gate INV-F6RBAC B2-SWEEP) | `creator_ids is not None` yang menentukan |
+| 7 | **layar kosong tidak jujur**: "belum ada konten" padahal sebabnya kewenangan | pemakai (dan admin) menyimpulkan datanya hilang | `scope_empty` + pesan "kosong karena KEWENANGAN"; catatan cakupan KPI disembunyikan saat itu |
+| 8 | **pekan masa depan** bisa dibuka (portal kreator & layar staf) | metrik 0 pekan yang belum terjadi terbaca "performa nol" | tombol "pekan depan" **disabled** di pekan berjalan + nilai tanggal **di-clamp** ke hari ini (bukan hanya atribut `max`) |
+
+Tambahan kualitas: **platform konten diturunkan dari tokonya** bila field `platform` kosong
+(sebelumnya seluruh rekap "Per Platform" jatuh ke satu baris `(kosong)` — pertanyaan pemilik
+"per toko/platform" tidak benar-benar terjawab); label kelompok kosong dinamai jelas
+(`(tanpa platform)` / `(tanpa toko)` / `(tanpa jenis)`); hint "belum ada konten pada pekan ini"
+di kartu kreator; `last_sent` tidak lagi mengangkut badan email panjang; muatan `body_text`
+dikeluarkan dari daftar.
+
+**Bukti**: gate **INV-F40 naik 17 → 24 invarian** (grup C: pagar masukan & lingkup pada jalur
+TULIS) · `bash scripts/gate.sh --full` → **0 FAIL, VERDICT HIJAU** · testing agent
+iteration_93 (5/5), iteration_94, iteration_95 (**5/5, 0 temuan**) · data uji QA dipulihkan
+(9 dari 15 konten ber-KPI, log kirim rapor uji dihapus).
+
+---
+
 # [2026-08-24 #35] **KPI KONTEN PER KONTEN (input manual)** · **RAPOR KREATOR MINGGUAN**
 
 ## Permintaan pemilik

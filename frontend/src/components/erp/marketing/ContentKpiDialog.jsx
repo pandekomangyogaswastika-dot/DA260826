@@ -77,7 +77,13 @@ export default function ContentKpiDialog({ open, onClose, onSaved, token, conten
     }
     setSaving(true);
     try {
-      const payload = Object.fromEntries(FIELDS.map(([f]) => [f, num(form[f])]));
+      // Field yang dikosongkan dikirim `null` — server akan MEMPERTAHANKAN nilai
+      // lamanya. Mengirim 0 untuk kolom yang tidak diisi akan menghapus angka yang
+      // sudah benar (mis. GMV) tanpa pemakai sadar.
+      const payload = Object.fromEntries(FIELDS.map(([f]) => {
+        const raw = form[f];
+        return [f, raw === '' || raw === null || raw === undefined ? null : num(raw)];
+      }));
       await axios.post(`${API}/api/marketing/content-calendar/${content.id}/kpi`,
         { ...payload, published_url: url.trim(), source: 'manual' }, { headers: authH });
       toast.success('KPI konten tersimpan');

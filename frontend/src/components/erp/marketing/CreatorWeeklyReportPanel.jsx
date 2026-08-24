@@ -38,6 +38,11 @@ export default function CreatorWeeklyReportPanel({ token }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState('');
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  // Atribut `max` hanya membatasi picker, bukan tanggal yang DIKETIK — pekan masa
+  // depan selalu bernilai 0 dan terbaca sebagai "kreator tidak bekerja".
+  const setWeek = (v) => setWeekEnd(v && v > todayStr ? todayStr : (v || todayStr));
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -79,7 +84,8 @@ export default function CreatorWeeklyReportPanel({ token }) {
       <div className="flex flex-wrap items-end gap-2">
         <div>
           <label className="text-[11px] text-muted-foreground block">Pekan berakhir</label>
-          <input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)}
+          <input type="date" value={weekEnd} max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setWeek(e.target.value)}
             data-testid="weekly-week-end"
             className="h-8 rounded-md border border-border bg-background text-foreground px-2 text-xs" />
         </div>

@@ -1201,3 +1201,9 @@ Aturan produk yang sekarang berlaku (wajib diingat lintas sesi):
   INV-F6RBAC B2-SWEEP). Pakai `ids is not None`.
 * Gate: `scripts/verify_kpi_konten_rapor_mingguan.py` (**INV-F40**, 17 invarian) di `gate.sh`.
   Total gate: **63**.
+* **Audit #35b (2026-08-24):** jalur TULIS wajib berpagar lingkup toko juga — jangan pernah
+  menganggap "layar bacanya sudah disaring" cukup. Masukan KPI dijaga batas kewajaran
+  (tidak negatif · CTR 0–100 · engagement ≤ 3× views · engagement tanpa views ditolak), field
+  yang tidak dikirim TIDAK ditimpa nol, daftar terpotong WAJIB mengaku, layar kosong karena
+  kewenangan WAJIB berbeda bunyinya dari kosong karena data, dan pekan masa depan tidak boleh
+  bisa dibuka. Semua dijaga INV-F40 (24 invarian).

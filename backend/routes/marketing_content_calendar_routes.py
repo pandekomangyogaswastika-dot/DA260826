@@ -174,16 +174,22 @@ class ContentEntryUpdate(BaseModel):
 
 
 class ContentKpiIn(BaseModel):
-    """KPI satu konten. Diisi manual (atau nanti dari impor `content_performance`)."""
-    views: float = 0
-    likes: float = 0
-    comments: float = 0
-    shares: float = 0
-    saves: float = 0
-    watch_time_avg_sec: float = 0
-    ctr: float = 0
-    orders: float = 0
-    gmv: float = 0
+    """KPI satu konten. Diisi manual (atau nanti dari impor `content_performance`).
+
+    Semua angka **opsional**: field yang tidak dikirim TIDAK ditimpa nol. Dulu semua
+    field bernilai bawaan 0, sehingga pengirim yang hanya membawa `views` akan
+    diam-diam menghapus `gmv`/`orders` yang sudah benar — jebakan yang pasti meledak
+    saat impor laporan konten (yang tiap platform kolomnya beda) dipasang.
+    """
+    views: Optional[float] = None
+    likes: Optional[float] = None
+    comments: Optional[float] = None
+    shares: Optional[float] = None
+    saves: Optional[float] = None
+    watch_time_avg_sec: Optional[float] = None
+    ctr: Optional[float] = None
+    orders: Optional[float] = None
+    gmv: Optional[float] = None
     published_url: Optional[str] = None
     source: Optional[str] = "manual"
 
@@ -525,13 +531,44 @@ async def set_content_kpi(entry_id: str, body: ContentKpiIn, request: Request):
     entry = await db.marketing_content_calendar.find_one({"id": entry_id}, {"_id": 0})
     if not entry:
         raise HTTPException(404, "Konten tidak ditemukan")
+    # Pagar lingkup toko: layar-layar BACA sudah menyaring per toko, tetapi jalur
+    # TULIS ini tidak — staf toko A bisa menulis KPI konten toko B (dan angkanya
+    # ikut masuk rekap toko B). Baru terpapar sejak sesi #35 karena dialog "Isi KPI"
+    # adalah pemanggil pertama endpoint ini.
+    from core import marketing_account_scope as _scope
+    if entry.get("account_id"):
+        await _scope.assert_account_visible(db, user, entry["account_id"])
     url = (body.published_url or entry.get("published_url") or "").strip()
     if not url:
         raise HTTPException(400, "KPI hanya bisa diisi untuk konten yang sudah terbit — "
                                  "isi link terbitnya dulu (tombol Edit).")
     if not _URL_RE.match(url):
         raise HTTPException(400, f"Link terbit harus URL http/https — diterima: '{url[:60]}'")
-    kpi = {k: float(getattr(body, k) or 0) for k in KPI_KEYS}
+    old = entry.get("kpi") or {}
+    kpi: dict = {}
+    for k in KPI_KEYS:
+        v = getattr(body, k)
+        if v is None:                      # tidak dikirim ⇒ pakai nilai lama
+            kpi[k] = float(old.get(k) or 0)
+            continue
+        v = float(v)
+        if v != v or v in (float("inf"), float("-inf")):
+            raise HTTPException(400, f"Nilai '{k}' bukan angka yang bisa dipakai.")
+        if v < 0:
+            raise HTTPException(400, f"KPI '{k}' tidak boleh negatif (diterima {v}) — "
+                                     "views/likes/pesanan/GMV tidak pernah minus.")
+        kpi[k] = v
+    if kpi["ctr"] > 100:
+        raise HTTPException(400, f"CTR {kpi['ctr']}% mustahil — CTR adalah persen (0–100). "
+                                 "Kalau yang dimaksud jumlah klik, itu bukan kolom ini.")
+    eng = kpi["likes"] + kpi["comments"] + kpi["shares"]
+    if kpi["views"] > 0 and eng > kpi["views"] * 3:
+        raise HTTPException(400, f"Engagement ({eng:.0f}) lebih dari 3× views "
+                                 f"({kpi['views']:.0f}) — periksa lagi, kemungkinan kolom "
+                                 "views dan likes tertukar.")
+    if kpi["views"] == 0 and eng > 0:
+        raise HTTPException(400, "Ada likes/komentar/share tetapi views 0 — angka itu tidak "
+                                 "mungkin datang bersamaan; isi views-nya dulu.")
     now = _now()
     upd = {
         "kpi": kpi, "kpi_derived": _kpi_derived(kpi),
@@ -569,6 +606,7 @@ async def content_performance(request: Request,
     db = get_db()
     from core import marketing_account_scope as _scope
     q: dict = {}
+    scope_empty = False
     if account_id:
         await _scope.assert_account_visible(db, user, account_id)
         q["account_id"] = account_id
@@ -576,6 +614,7 @@ async def content_performance(request: Request,
         visible = await _scope.visible_account_ids(db, user)
         if visible is not None:
             q["account_id"] = {"$in": visible}
+            scope_empty = not visible
     if creator_id:
         q["creator_id"] = creator_id
     if date_from or date_to:
@@ -584,18 +623,31 @@ async def content_performance(request: Request,
             q["date"]["$gte"] = date_from
         if date_to:
             q["date"]["$lte"] = date_to
-    rows = await db.marketing_content_calendar.find(q, {"_id": 0}).to_list(5000)
+    rows = await db.marketing_content_calendar.find(q, {"_id": 0}).to_list(5001)
+    perf_truncated = len(rows) > 5000
+    rows = rows[:5000]
 
     key_field = {"creator": "creator_id", "content_type": "content_type",
                  "account": "account_id", "platform": "platform"}.get(group_by, "creator_id")
     creators = {c["id"]: c for c in await db.marketing_kol_creators.find(
         {}, {"_id": 0, "id": 1, "name": 1, "creator_code": 1}).to_list(500)}
     accounts = {a["id"]: a for a in await db.marketing_platform_accounts.find(
-        {}, {"_id": 0, "id": 1, "account_name": 1}).to_list(300)}
+        {}, {"_id": 0, "id": 1, "account_name": 1, "platform": 1}).to_list(300)}
+
+    def _platform_of(doc: dict) -> str:
+        """Platform konten. Banyak baris lama menyimpannya KOSONG padahal tokonya
+        jelas berplatform — tanpa penurunan ini, seluruh rekap 'Per Platform'
+        menjadi satu baris '(tanpa platform)' dan pertanyaan pemilik tidak terjawab."""
+        return (doc.get("platform")
+                or accounts.get(doc.get("account_id") or "", {}).get("platform") or "")
 
     buckets: dict = {}
     for r in rows:
-        gk = r.get(key_field) or ("(tanpa kreator)" if key_field == "creator_id" else "(kosong)")
+        gv = _platform_of(r) if key_field == "platform" else r.get(key_field)
+        gk = gv or {"creator_id": "(tanpa kreator)",
+                    "platform": "(tanpa platform)",
+                    "account_id": "(tanpa toko)",
+                    "content_type": "(tanpa jenis)"}.get(key_field, "(kosong)")
         b = buckets.setdefault(gk, {"key": gk, "contents": 0, "posted": 0, "with_kpi": 0,
                                     "views": 0.0, "likes": 0.0, "comments": 0.0,
                                     "shares": 0.0, "saves": 0.0, "orders": 0.0,
@@ -683,14 +735,21 @@ async def content_performance(request: Request,
         "sudah diisi yang ikut menghitung views/engagement/GMV.",
         "Konten berstatus 'posted' wajib punya link terbit — angka tanpa link "
         "tidak bisa dicek ulang.",
-    ]
+    ] if not scope_empty else []
     if totals["contents"] and totals["order_revenue"] == 0:
         notes.append("Kolom 'Omzet pesanan' Rp 0 karena belum ada pesanan ber-kreator "
                      "pada rentang ini — bukan berarti tidak ada penjualan; pesanannya "
                      "belum tertaut ke kreator.")
+    if perf_truncated:
+        notes.insert(0, "REKAP TERPOTONG di 5.000 konten — masih ada konten lain pada "
+                        "rentang ini, jadi seluruh angka di layar ini KURANG dari "
+                        "kenyataan. Persempit rentang tanggalnya.")
+    if scope_empty:
+        notes.insert(0, "Belum ada toko yang di-assign kepada akun Anda, jadi rekap ini "
+                        "kosong karena KEWENANGAN — bukan karena tidak ada konten.")
     return serialize({
         "success": True, "group_by": group_by, "rows": out, "totals": totals,
-        "data_notes": notes,
+        "truncated": perf_truncated, "scope_empty": scope_empty, "data_notes": notes,
     })
 
 
@@ -718,6 +777,7 @@ async def content_performance_per_content(
     user = await require_auth(request)
     db = get_db()
     q: dict = {}
+    scope_empty = False
     if account_id:
         await _scope.assert_account_visible(db, user, account_id)
         q["account_id"] = account_id
@@ -725,6 +785,9 @@ async def content_performance_per_content(
         visible = await _scope.visible_account_ids(db, user)
         if visible is not None:
             q["account_id"] = {"$in": visible}
+            # Lingkup kosong ≠ data kosong. Tanpa penanda ini, layar berkata "belum ada
+            # konten" kepada pemakai yang sebenarnya BELUM di-assign toko mana pun.
+            scope_empty = not visible
     if creator_id:
         q["creator_id"] = creator_id
     if content_type:
@@ -742,11 +805,13 @@ async def content_performance_per_content(
     elif kpi_state == "missing":
         q["kpi_updated_at"] = {"$in": [None, ""]}
 
-    docs = await db.marketing_content_calendar.find(q, {"_id": 0}).to_list(limit)
+    docs = await db.marketing_content_calendar.find(q, {"_id": 0}).to_list(limit + 1)
+    truncated = len(docs) > limit
+    docs = docs[:limit]
     creators = {c["id"]: c for c in await db.marketing_kol_creators.find(
         {}, {"_id": 0, "id": 1, "name": 1, "creator_code": 1}).to_list(500)}
     accounts = {a["id"]: a for a in await db.marketing_platform_accounts.find(
-        {}, {"_id": 0, "id": 1, "account_name": 1}).to_list(300)}
+        {}, {"_id": 0, "id": 1, "account_name": 1, "platform": 1}).to_list(300)}
 
     rows = []
     for d in docs:
@@ -758,7 +823,8 @@ async def content_performance_per_content(
             "post_time": d.get("post_time") or "",
             "title": d.get("title") or "(tanpa judul)",
             "status": d.get("status"),
-            "platform": d.get("platform") or "",
+            "platform": (d.get("platform")
+                         or accounts.get(d.get("account_id") or "", {}).get("platform") or ""),
             "account_id": d.get("account_id") or "",
             "account_name": (d.get("account_name")
                              or accounts.get(d.get("account_id") or "", {}).get("account_name") or ""),
@@ -800,17 +866,28 @@ async def content_performance_per_content(
     totals["kpi_coverage_pct"] = (round(len(filled) / len(rows) * 100, 2) if rows else 0.0)
     totals["engagement_rate"] = (round(totals["engagement"] / totals["views"] * 100, 2)
                                  if totals["views"] > 0 else 0.0)
+    notes = [
+        f"{len(rows) - len(filled)} dari {len(rows)} konten BELUM punya KPI — "
+        "angka rekap hanya mewakili konten yang sudah diisi.",
+        "KPI hanya bisa diisi untuk konten yang punya link terbit; tanpa link, "
+        "angkanya tidak bisa dicek ulang ke platform.",
+        "Angka turunan (engagement, eng. rate, CVR, GMV/view, AOV) DIHITUNG "
+        "sistem — tidak pernah diketik.",
+    ] if not scope_empty else []
+    if truncated:
+        # Pemotongan senyap adalah cara termudah membuat laporan yang "kelihatan
+        # lengkap": totalnya benar untuk baris yang terbaca, dan salah untuk kenyataan.
+        notes.insert(0, f"DAFTAR TERPOTONG di {limit} baris — masih ada konten lain pada "
+                        "rentang ini, jadi seluruh total di layar ini KURANG dari kenyataan. "
+                        "Persempit rentang tanggal atau saring per toko/kreator.")
+    if scope_empty:
+        notes.insert(0, "Belum ada toko yang di-assign kepada akun Anda, jadi layar ini "
+                        "kosong karena KEWENANGAN — bukan karena tidak ada konten. "
+                        "Minta admin meng-assign toko Anda.")
     return serialize({
-        "success": True, "rows": rows, "totals": totals,
-        "kpi_keys": list(KPI_KEYS),
-        "data_notes": [
-            f"{len(rows) - len(filled)} dari {len(rows)} konten BELUM punya KPI — "
-            "angka rekap hanya mewakili konten yang sudah diisi.",
-            "KPI hanya bisa diisi untuk konten yang punya link terbit; tanpa link, "
-            "angkanya tidak bisa dicek ulang ke platform.",
-            "Angka turunan (engagement, eng. rate, CVR, GMV/view, AOV) DIHITUNG "
-            "sistem — tidak pernah diketik.",
-        ],
+        "success": True, "rows": rows, "totals": totals, "truncated": truncated,
+        "scope_empty": scope_empty,
+        "limit": limit, "kpi_keys": list(KPI_KEYS), "data_notes": notes,
     })
 
 
