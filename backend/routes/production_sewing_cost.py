@@ -330,3 +330,126 @@ async def hpp_by_sku(sku: str, request: Request):
         raise HTTPException(404, f"SKU barang jadi '{sku}' tidak ada di master")
     snap = await fcl.hpp_snapshot(db, mat["id"])
     return {"ok": True, "material": mat, "hpp": snap}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAUTKAN SKU SPK → MASTER BARANG JADI (sesi #34)
+# ══════════════════════════════════════════════════════════════════════════════
+# Diukur: 7 dari 7 baris `po_items` memakai SKU yang TIDAK ADA di master barang
+# jadi (`ARN-HD-M`, `DA-TS01-ALLSIZE`, …). Akibatnya biaya jahit yang diisi tidak
+# pernah sampai ke HPP produk mana pun — lapisan HPP batch lahir dari
+# `material_id` master, dan master itu tidak pernah ketemu.
+#
+# Alat ini TIDAK menautkan sendiri. Ia mengusulkan pasangan beserta ALASANNYA
+# (kode sepadan / model sama / ukuran sama / nama mirip) dan staf yang memutuskan.
+# SKU asli disimpan (`sku_original`) supaya penautan bisa diperiksa & dibatalkan.
+def _code_parts(code: str) -> list:
+    return [p for p in str(code or "").upper().replace("_", "-").split("-") if p]
+
+
+def _score_candidate(item: dict, mat: dict) -> tuple:
+    """(skor 0..1, alasan) — dihitung dari bukti, bukan tebakan bebas."""
+    import difflib
+    reasons = []
+    score = 0.0
+    ip, mp = _code_parts(item.get("sku")), _code_parts(mat.get("code"))
+    shared = [p for p in ip if p in mp]
+    if ip and shared:
+        frac = len(shared) / len(ip)
+        score += 0.45 * frac
+        reasons.append(f"kode sepadan: {'-'.join(shared)}")
+    if item.get("model_id") and item.get("model_id") == mat.get("model_id"):
+        score += 0.3
+        reasons.append("model master sama")
+    size_item = next((p for p in ip if p in ("S", "M", "L", "XL", "XXL", "XXXL", "ALLSIZE")), "")
+    if size_item and str(mat.get("size_code") or "").upper() == size_item:
+        score += 0.15
+        reasons.append(f"ukuran sama ({size_item})")
+    elif size_item and mat.get("size_code"):
+        score -= 0.25
+        reasons.append(f"ukuran BEDA (SPK {size_item} vs master {mat.get('size_code')})")
+    nm = difflib.SequenceMatcher(
+        None, str(item.get("product_name") or "").lower(), str(mat.get("name") or "").lower()
+    ).ratio()
+    score += 0.25 * nm
+    if nm > 0.5:
+        reasons.append(f"nama mirip {round(nm * 100)}%")
+    return max(0.0, min(1.0, round(score, 3))), reasons
+
+
+@router.get("/unlinked")
+async def list_unlinked(request: Request, limit: int = Query(100, ge=1, le=500)):
+    """Baris SPK yang SKU-nya tidak ada di master + usulan pasangannya."""
+    await require_auth(request)
+    _guard(_user(request), READ_ROLES, "lihat produksi")
+    db = get_db()
+    items = await db.po_items.find({}, {"_id": 0}).to_list(5000)
+    codes = {m["code"]: m for m in await db.rahaza_materials.find(
+        {"type": "fg"}, {"_id": 0, "id": 1, "code": 1, "name": 1, "model_id": 1,
+                         "size_code": 1, "color_name": 1, "hpp": 1}).to_list(5000)}
+    mats = list(codes.values())
+    out = []
+    for it in items:
+        if it.get("sku") and it["sku"] in codes:
+            continue
+        scored = sorted(((*_score_candidate(it, m), m) for m in mats),
+                        key=lambda x: -x[0])[:5]
+        out.append({
+            "po_item_id": it["id"], "po_number": it.get("po_number") or "",
+            "po_id": it.get("po_id") or "",
+            "sku": it.get("sku") or "", "product_name": it.get("product_name") or "",
+            "model_id": it.get("model_id") or "", "qty": int(_f(it.get("qty"))),
+            "rate_per_pcs": round(_f(it.get("cmt_price_snapshot")), 2),
+            "sewing_at_risk": round(_f(it.get("cmt_price_snapshot")) * _f(it.get("qty")), 2),
+            "reason": ("SKU tidak ada di master barang jadi"
+                       if it.get("sku") else "item SPK tidak punya SKU"),
+            "candidates": [{
+                "material_id": m["id"], "code": m["code"], "name": m.get("name"),
+                "size": m.get("size_code"), "color": m.get("color_name"),
+                "score": sc, "reasons": rs,
+                "confident": sc >= 0.7,
+            } for sc, rs, m in scored if sc > 0.2],
+        })
+    total_risk = round(sum(r["sewing_at_risk"] for r in out), 2)
+    rupiah = f"{total_risk:,.0f}".replace(",", ".")
+    return {"ok": True, "data": out[:limit], "total": len(out),
+            "sewing_at_risk_total": total_risk,
+            "note": (f"Selama belum ditautkan, ongkos jahit sebesar Rp {rupiah} "
+                     "tidak akan pernah masuk HPP produk.")}
+
+
+class LinkIn(BaseModel):
+    material_id: str
+    note: str = ""
+
+
+@router.post("/link/{po_item_id}")
+async def link_item(po_item_id: str, body: LinkIn, request: Request):
+    """Tautkan satu baris SPK ke SKU master (keputusan manusia, berjejak)."""
+    await require_auth(request)
+    user = _user(request)
+    _guard(user, WRITE_ROLES, "kelola produksi (production.manage)")
+    db = get_db()
+    it = await db.po_items.find_one({"id": po_item_id}, {"_id": 0})
+    if not it:
+        raise HTTPException(404, "Baris SPK tidak ditemukan")
+    mat = await db.rahaza_materials.find_one(
+        {"id": body.material_id, "type": "fg"},
+        {"_id": 0, "id": 1, "code": 1, "name": 1, "model_id": 1, "size_id": 1, "size_code": 1})
+    if not mat:
+        raise HTTPException(404, "SKU master barang jadi tidak ditemukan")
+    actor = user.get("name") or user.get("email") or "system"
+    await db.po_items.update_one({"id": po_item_id}, {"$set": {
+        "sku": mat["code"],
+        "sku_original": it.get("sku_original") or it.get("sku") or "",
+        "fg_material_id": mat["id"],
+        "model_id": mat.get("model_id") or it.get("model_id") or "",
+        "size_id": mat.get("size_id") or it.get("size_id") or "",
+        "sku_link_by": actor, "sku_link_at": _now(),
+        "sku_link_note": body.note or "",
+    }})
+    await log_activity(user.get("id", "system"), actor, "update", "Tautkan SKU SPK",
+                       f"SPK {it.get('po_number')}: '{it.get('sku')}' ditautkan ke master "
+                       f"{mat['code']}" + (f" — {body.note}" if body.note else ""))
+    return {"ok": True, "po_item_id": po_item_id, "sku": mat["code"],
+            "material_id": mat["id"], "sku_original": it.get("sku")}

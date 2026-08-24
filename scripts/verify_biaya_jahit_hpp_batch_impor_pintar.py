@@ -199,6 +199,35 @@ def main() -> int:  # noqa: C901
                      {"items": [{"po_item_id": it["po_item_id"], "rate_per_pcs": before}],
                       "apply_same_sku": False, "notes": f"GATE39 pulihkan {STAMP}"})
 
+    # ── A6 — ALAT TAUTKAN SKU SPK → MASTER ────────────────────────────────────
+    # Biaya jahit hanya sampai ke HPP kalau baris SPK menunjuk SKU master. Alat
+    # ini harus (a) menyebut BERAPA RUPIAH ongkos jahit yang menggantung, dan
+    # (b) menyimpan SKU asli saat menautkan supaya keputusan bisa diperiksa.
+    st, un = call("GET", "/api/production/sewing-cost/unlinked", token)
+    if st != 200:
+        bad("A6", f"daftar SKU SPK belum tertaut gagal (HTTP {st})", det(un))
+    elif "sewing_at_risk_total" not in (un or {}):
+        bad("A6", "alat tidak menyebut nominal ongkos jahit yang menggantung")
+    else:
+        linked = list(db.po_items.find({"sku_original": {"$nin": [None, ""]}},
+                                       {"_id": 0, "sku": 1, "sku_original": 1,
+                                        "fg_material_id": 1, "sku_link_by": 1}).limit(20))
+        broken = [x for x in linked if not x.get("fg_material_id")]
+        if broken:
+            bad("A6", f"{len(broken)} baris ditautkan tanpa `fg_material_id` — "
+                      "biaya jahit tetap tidak sampai ke HPP")
+        else:
+            ok("A6", f"{un['total']} baris SPK belum tertaut (Rp {un['sewing_at_risk_total']:,.0f} "
+                     f"ongkos jahit menggantung, DISEBUT di layar) · {len(linked)} baris sudah "
+                     "ditautkan dengan SKU asli tersimpan")
+            for r in (un.get("data") or [])[:1]:
+                if r.get("candidates") and not r["candidates"][0].get("reasons"):
+                    bad("A7", "usulan pasangan tidak menyebut alasannya")
+                    break
+            else:
+                ok("A7", "setiap usulan pasangan menyebut dasarnya "
+                         "(kode sepadan / model sama / ukuran / nama mirip)")
+
     # ══ B. HPP BATCH (FIFO) ═══════════════════════════════════════════════════
     head("B — HPP BATCH: lapisan FIFO & rata-rata TERTIMBANG lapisan bersisa")
     layers = list(db.fg_cost_layers.find({}, {"_id": 0}).limit(500))

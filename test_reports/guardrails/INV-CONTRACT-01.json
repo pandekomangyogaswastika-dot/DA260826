@@ -1,15 +1,15 @@
 {
   "gate": "INV-CONTRACT-01",
   "title": "Kontrak FE\u2194BE (duplicate route / FE\u2192route ada / orphan BE)",
-  "checked": 2377,
+  "checked": 2379,
   "counts": {
     "INFO": 18,
     "WARN": 59
   },
   "blocking": 0,
   "block_sev": [],
-  "duration_s": 10.05,
-  "ts": "2026-08-23 23:03:25",
+  "duration_s": 9.89,
+  "ts": "2026-08-24 01:50:33",
   "findings": [
     {
       "sev": "WARN",

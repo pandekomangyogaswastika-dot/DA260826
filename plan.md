@@ -34,7 +34,17 @@ Status: **SELESAI & HIJAU** · `bash scripts/gate.sh` → **62 gate · VERDICT H
 - **H. Mesin identitas varian** — pola nyata `(6-7th)`, `1 PCS`, `FIT TO M`, `DEWASA & L ANAK`,
   `BUNDLING`.
 
+## Tambahan (lanjutan permintaan pemilik)
+- **Tautkan SKU SPK** — alat usulan + penautan berjejak di layar Biaya Jahit; 4/7 baris demo
+  ditautkan (bukti meyakinkan), **3 baris dibiarkan terlihat** karena masternya belum ada
+  (`ARN-HD-L`, `ARN-PL-M`, `ARN-PL-L` — Rp 3.600.000 ongkos jahit menggantung).
+- **Ditunda atas permintaan pemilik**: impor berkas pencairan (menunggu berkas asli) dan rapor
+  kreator mingguan via WhatsApp (menunggu keputusan penyedia + nomor tujuan).
+
 ## PR berikutnya (belum dikerjakan — sengaja, bukan lupa)
+0. **Buat master untuk 3 SKU SPK yang belum ada** (`ARN-HD-L`, `ARN-PL-M`, `ARN-PL-L`) di Master
+   Produk/RnD, lalu tautkan lewat layar Biaya Jahit — sesudah itu Rp 3,6 juta ongkos jahit punya
+   jalan ke HPP.
 1. **Konsumsi FIFO saat barang jadi KELUAR belum dipasang di pintu penjualan.**
    `core/fg_cost_layers.consume_fifo()` sudah ada & diuji, tetapi belum dipanggil dari alur
    pengiriman/penjualan. Akibat hari ini: `qty_remaining` lapisan hanya berkurang bila dipanggil

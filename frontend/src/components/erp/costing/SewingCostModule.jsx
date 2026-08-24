@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { GlassCard } from '@/components/ui/glass';
-import { apiGet, apiPut } from '@/lib/api';
+import { apiGet, apiPut, apiPost } from '@/lib/api';
 
 const rp = (v) => `Rp ${Math.round(Number(v || 0)).toLocaleString('id-ID')}`;
 const num = (v) => Number(v || 0).toLocaleString('id-ID');
@@ -49,6 +49,35 @@ export default function SewingCostModule({ onNavigate }) {
   const [draft, setDraft] = useState({});
   const [applySameSku, setApplySameSku] = useState(true);
   const [saving, setSaving] = useState(false);
+  // SESI #34 — baris SPK yang SKU-nya tidak ada di master: selama belum
+  // ditautkan, ongkos jahit yang diisi di layar ini TIDAK akan pernah masuk HPP.
+  // Karena itu usulan pasangannya dibawa ke layar yang sama, bukan layar lain.
+  const [unlinked, setUnlinked] = useState({});
+  const [linking, setLinking] = useState('');
+
+  const loadUnlinked = useCallback(async () => {
+    try {
+      const res = await apiGet('/production/sewing-cost/unlinked?limit=300');
+      const map = {};
+      (res?.data || []).forEach((r) => { map[r.po_item_id] = r; });
+      setUnlinked(map);
+    } catch { /* daftar usulan bersifat tambahan — kegagalannya tidak menutup layar */ }
+  }, []);
+
+  const linkToMaster = async (poItemId, cand) => {
+    setLinking(poItemId);
+    try {
+      await apiPost(`/production/sewing-cost/link/${poItemId}`,
+        { material_id: cand.material_id, note: (cand.reasons || []).join(' · ') });
+      toast.success(`Ditautkan ke master ${cand.code}`);
+      await loadUnlinked();
+      if (detail?.po?.id) await loadDetail(detail.po.id);
+    } catch (e) {
+      toast.error(e.message || 'Gagal menautkan');
+    } finally {
+      setLinking('');
+    }
+  };
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -80,6 +109,7 @@ export default function SewingCostModule({ onNavigate }) {
   }, []);
 
   useEffect(() => { loadList(); }, [loadList]);
+  useEffect(() => { loadUnlinked(); }, [loadUnlinked]);
 
   const totals = useMemo(() => {
     const items = detail?.items || [];
@@ -266,13 +296,39 @@ export default function SewingCostModule({ onNavigate }) {
                               {/* SSOT: kalau item SPK tidak menunjuk master, biaya
                                   jahit yang diisi TIDAK akan sampai ke HPP produk.
                                   Ini dikatakan di baris itu sendiri. */}
+                              {/* Usulan pasangan master — SEKALI KLIK, tetapi
+                                  tetap keputusan manusia, dan alasannya disebut. */}
+                              {(unlinked[it.po_item_id]?.candidates || []).slice(0, 2).map((c) => (
+                                <button key={c.material_id} type="button"
+                                  disabled={linking === it.po_item_id}
+                                  data-testid={`sewing-link-${it.sku}-${c.code}`}
+                                  onClick={() => linkToMaster(it.po_item_id, c)}
+                                  className={`mt-1 mr-1 px-1.5 py-0.5 rounded border text-[11px] disabled:opacity-50 ${
+                                    c.confident
+                                      ? 'border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10'
+                                      : 'border-foreground/20 text-foreground/60 hover:bg-foreground/5'}`}>
+                                  tautkan ke {c.code} ({Math.round(c.score * 100)}%) — {(c.reasons || []).join(', ')}
+                                </button>
+                              ))}
+                              {unlinked[it.po_item_id] && !(unlinked[it.po_item_id].candidates || []).length ? (
+                                <div className="text-[11px] text-foreground/50 mt-0.5">
+                                  Tidak ada kandidat master yang mirip — buat SKU-nya dulu di Master Produk / RnD.
+                                </div>
+                              ) : null}
                               {(it.ssot?.messages || []).map((m) => (
                                 <div key={m} data-testid={`sewing-ssot-${it.sku}`}
                                   className="text-xs text-red-600 dark:text-red-400 mt-0.5">
                                   {m}
                                 </div>
                               ))}
-                              {(it.hpp_preview?.gaps || []).filter((g) => !g.includes('biaya jahit')).map((g) => (
+                              {/* Kekurangan yang SUDAH disebut baris SSOT tidak
+                                  diulang — pesan kembar membuat orang berhenti
+                                  membaca peringatan sama sekali. */}
+                              {(it.hpp_preview?.gaps || [])
+                                .filter((g) => !g.includes('biaya jahit'))
+                                .filter((g) => !(it.ssot?.messages || []).length
+                                  || !(g.includes('model') || g.includes('BOM')))
+                                .map((g) => (
                                 <div key={g} className="text-xs text-amber-600 dark:text-amber-300 mt-0.5">{g}</div>
                               ))}
                             </td>

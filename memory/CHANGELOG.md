@@ -85,6 +85,26 @@ Seluruh suite: `bash scripts/gate.sh` → **62 gate · VERDICT HIJAU**.
 identitasnya mustahil dipulihkan.
 
 
+## Tambahan sesi #34 (lanjutan permintaan pemilik: "Tautkan SKU SPK")
+* **Alat "Tautkan SKU SPK → master"** (`GET /api/production/sewing-cost/unlinked`,
+  `POST /api/production/sewing-cost/link/{po_item_id}`) tampil **di layar Biaya Jahit itu sendiri**,
+  bukan layar lain — karena di situlah orang mengetik angka yang berisiko hilang. Alat ini
+  **mengusulkan** pasangan master beserta **alasannya** (kode sepadan / model sama / ukuran sama /
+  nama mirip) dan menyebut **berapa rupiah ongkos jahit yang menggantung**; SKU asli disimpan
+  (`sku_original`, `sku_link_by/at/note`) supaya penautan bisa diperiksa dan dibatalkan.
+* **Data demo ditautkan sebagian, dengan sengaja**: 4 dari 7 baris SPK ditautkan karena buktinya
+  meyakinkan (skor ≥ 0,7) — `ARN-HD-M → ARN-HD-NVY-M` (0,81) dan 3× `DA-TS01-ALLSIZE →
+  DA-TS01-PTH-ALLSIZE` (1,0). **3 baris sisanya (`ARN-HD-L`, `ARN-PL-M`, `ARN-PL-L`, ongkos jahit
+  Rp 3.600.000) DIBIARKAN TERLIHAT belum tertaut** karena masternya memang tidak ada; menautkannya
+  ke kandidat berskor 0,4–0,56 sama dengan mengarang identitas barang, dan itu merusak HPP lebih
+  parah daripada membiarkan kekurangannya terbaca. Layar menyebutnya per baris.
+* Buktinya berjalan: `DA-TS01-PTH-ALLSIZE` sekarang menunjukkan **3 baris SPK · 500 pcs · BOM siap ·
+  HPP/pcs Rp 15.000** (bahan 5.500 + jahit 9.000 + internal 500).
+* Gate **INV-F39** bertambah menjadi **26 invarian** (A5 pelaporan SSOT per baris, A6 nominal
+  menggantung + `fg_material_id` wajib terisi saat menautkan, A7 usulan wajib menyebut dasarnya).
+* **Belum dikerjakan atas permintaan pemilik ("skip dulu")**: impor berkas pencairan (berkas asli
+  belum dikirim) dan rapor kreator mingguan via WhatsApp (butuh penyedia berbayar + nomor tujuan).
+
 ---
 
 # [2026-08-23 #32] **NILAI POTONGAN LAHIR SAAT DIPOTONG** · **POTONGAN YATIM PUNYA PENJAGA & PEMBERSIH**
