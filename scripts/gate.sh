@@ -752,6 +752,15 @@ if [ $AUTH_READY -eq 1 ]; then
   run_gate "DATA — KPI konten per konten/jenis/toko/KOL + rapor kreator mingguan (INV-F40)" \
            "python3 scripts/verify_kpi_konten_rapor_mingguan.py"
 
+  # ── INV-F41 (sesi #36) — IMPOR MASTER DATA (migrasi data nyata) ─────────────
+  # Migrasi adalah langkah yang tidak bisa diulang tanpa biaya: importir yang
+  # menerima baris cacat tidak melahirkan error, melainkan MASTER HANTU, dan
+  # seluruh HPP/stok/insentif setelahnya salah tanpa ada yang tahu. Gate ini
+  # menahan: dry-run tidak menulis, baris cacat dilaporkan per baris, tidak ada
+  # impor separuh, dan impor ulang tidak menduplikasi.
+  run_gate "DATA — Impor master dari template Excel: dry-run, tolak cacat, idempoten (INV-F41)" \
+           "python3 scripts/verify_impor_master_template.py"
+
 else
   for g in "state machine jurnal" "nomor dokumen kembar" "batas nilai AR/AP" \
            "RBAC/IDOR" "input jahat 4xx" "endpoint kritis" \

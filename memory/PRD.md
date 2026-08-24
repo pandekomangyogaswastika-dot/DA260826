@@ -1207,3 +1207,21 @@ Aturan produk yang sekarang berlaku (wajib diingat lintas sesi):
   yang tidak dikirim TIDAK ditimpa nol, daftar terpotong WAJIB mengaku, layar kosong karena
   kewenangan WAJIB berbeda bunyinya dari kosong karena data, dan pekan masa depan tidak boleh
   bisa dibuka. Semua dijaga INV-F40 (24 invarian).
+
+## Sesi 2026-08-24 (#36) — IMPOR MASTER DATA (migrasi)
+
+* Master WAJIB (urut): lokasi → karyawan(+payroll) → warna → ukuran → proses → kain/benang →
+  **aksesoris** → model → barang jadi(SKU) → **BOM** → vendor/klien → akun toko → katalog jual →
+  KOL → livehost. Template: `data_import/TEMPLATE_MASTER_DA.xlsx`
+  (`scripts/master_template_generate.py`), importir: `scripts/import_master_template.py`.
+* **Aksesoris punya master sendiri dan IKUT BOM** — kancing/label/hangtag bagian nyata HPP.
+* Importir: **dry-run bawaan**, `--apply` dua tahap (validasi penuh dulu ⇒ tidak ada impor
+  separuh), idempoten via kode, tidak menghapus data lama, referensi silang dalam satu berkas
+  dikenali, setiap dokumen ditandai `import_batch`.
+* **TIDAK lewat Excel**: password portal kreator/livehost, saldo awal (stok/piutang/kas),
+  CoA (sudah terpasang).
+* ⚠️ **Penomoran dokumen**: penyemai/impor yang menulis dokumen bernomor langsung TIDAK menaikkan
+  pencacah ⇒ dulu memicu 500 `E11000`. `gen_prefixed_number()` sekarang menyembuhkan diri
+  (deteksi tabrakan → dorong pencacah ke max nyata → ulang). Jangan pernah membuat generator
+  nomor kedua.
+* Gate: INV-F41 (22 invarian). Total gate: **64**.

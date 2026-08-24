@@ -3,7 +3,7 @@
 > Dihasilkan `scripts/gate.sh`. JANGAN edit manual.
 > "Selesai" hanya sah bila receipt HIJAU untuk cakupan yang TIDAK di-skip.
 
-- **Waktu:** 2026-08-24 04:45:48  ·  **Durasi:** 138s  ·  **Mode:** full
+- **Waktu:** 2026-08-24 06:22:53  ·  **Durasi:** 143s  ·  **Mode:** full
 - **Backend:** RUNNING · **Auth:** READY
 
 | Gate | Hasil |
@@ -59,6 +59,7 @@
 | UANG/STOK — Belanja mingguan dari ambang, riwayat harga, ambang massal (INV-F38) | PASS |
 | UANG/DATA — Biaya jahit SPK, HPP batch FIFO, impor pintar, gaji host bulanan (INV-F39) | PASS |
 | DATA — KPI konten per konten/jenis/toko/KOL + rapor kreator mingguan (INV-F40) | PASS |
+| DATA — Impor master dari template Excel: dry-run, tolak cacat, idempoten (INV-F41) | PASS |
 | FITUR MATI — handler tergabung / kode setelah return | PASS |
 | FITUR MATI — panggilan FE ke endpoint yang tak ada | PASS |
 | NAVIGASI — menu hantu / duplikat / kedalaman | PASS |

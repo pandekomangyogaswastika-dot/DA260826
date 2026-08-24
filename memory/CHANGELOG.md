@@ -1,3 +1,62 @@
+# [2026-08-24 #36] **IMPOR MASTER DATA** — template Excel + importir dua tahap (INV-F41)
+
+Permintaan pemilik: *"saya ingin import data real … yang wajib adalah master data? data apa saja
+yang wajib saya import dan buatkan templatenya"*. Pilihan pemilik: **template kanonik**, data demo
+**dibiarkan** (pembersihan dilakukan di produksi), impor lewat **skrip**, **saldo awal belum**,
+lingkup **semua master**, dan **aksesoris wajib punya master & ikut BOM**.
+
+## Yang DIUKUR lebih dulu (bukan tebakan)
+Isi basis data saat ditanya: 332 material (318 FG · 2 kain · 2 benang · **10 aksesoris**) ·
+12 model · **0 BOM** · 0 lokasi kantor · 16 karyawan · 5 vendor · 12 akun toko · 78 katalog ·
+CoA 353 akun + 33 posting profile (**sudah siap, tidak perlu diimpor**). Artinya penghambat
+utama bukan "data belum ada" melainkan **BOM & lokasi kosong** — tanpa keduanya HPP tidak bisa
+dihitung dan stok tidak bisa masuk.
+
+## Yang DIKERJAKAN
+* **`scripts/master_template_spec.py`** — SATU sumber definisi kolom (dipakai bersama pembuat
+  template & importir; kalau dipisah, template dan importir pasti beda diam-diam).
+* **`scripts/master_template_generate.py`** → `data_import/TEMPLATE_MASTER_DA.xlsx`:
+  `00_PETUNJUK` + **16 sheet** berurut sesuai ketergantungan + `99_DAFTAR_PILIHAN`.
+  01 Lokasi · 02 Karyawan(+payroll) · 03 Warna · 04 Ukuran · 05 Proses · 06 Kain/Benang ·
+  **07 Aksesoris** · 08 Model · 09 Barang Jadi (SKU) · **10 BOM (kain + aksesoris)** ·
+  11 Vendor CMT · 12 Klien Maklon · 13 Akun Toko · 14 Katalog Jual · 15 KOL/Kreator ·
+  16 Livehost. Kolom wajib disorot; baris contoh diberi awalan `#` sehingga template boleh
+  langsung diimpor tanpa memasukkan data karangan.
+* **`scripts/import_master_template.py`** — importir **dua tahap**: seluruh berkas diperiksa
+  dulu tanpa menulis, penyimpanan (`--apply`) hanya berjalan bila laporan bersih ⇒ **tidak ada
+  impor separuh**. Idempoten (kode = kunci upsert), **tidak menghapus apa pun**, mengenali
+  **referensi silang di berkas yang sama** (BOM boleh menunjuk kain yang baru diisi di sheet 06),
+  setiap dokumen ditandai `import_batch`. Penolakan yang berbunyi jelas: kolom wajib kosong ·
+  enum ngawur · kode ukuran berspasi/garis miring (merusak SKU) · material BOM tak dikenal ·
+  barang jadi dipakai sebagai komponen BOM · qty BOM bukan angka · harga jual katalog 0 ·
+  kreator tipe `new` diberi insentif · live host tanpa NIK karyawan · kode kembar.
+* **`memory/PANDUAN_IMPOR_MASTER.md`** — urutan wajib + akibat nyata bila tiap master kosong.
+
+## Dua cacat importir yang ditemukan gate SENDIRI, lalu ditutup
+1. **Dry-run tidak pernah bisa bersih di basis data kosong** — BOM/katalog dicek ke basis data,
+   sehingga material yang lahir di sheet 06/07 berkas yang sama dilaporkan "tidak ada". Pemakai
+   akan belajar mengabaikan laporan pemeriksaan. → registri `pending` dalam-berkas.
+2. **`--apply` menulis 20 dokumen sebelum melaporkan error** (impor separuh). → dipecah menjadi
+   validasi penuh → baru menulis.
+
+## Bug lama yang ikut tertangkap (bukan bagian permintaan)
+`INV-F36` mendadak MERAH: **penerimaan barang balas 500** (`E11000 GR-00064`). Sebabnya bukan
+kode hari ini — **pencacah nomor dokumen tertinggal** di 66 sementara dokumen nyata sudah
+GR-00308, karena penyemai/impor menulis dokumen bernomor LANGSUNG tanpa menaikkan pencacah, dan
+lazy-init hanya jalan sekali. `utils/counters.gen_prefixed_number()` kini **menyembuhkan diri**:
+tabrakan dideteksi, pencacah didorong ke angka tertinggi yang nyata, lalu diulang. Pencacah GR
+yang sudah melenceng diperbaiki. Ini berlaku untuk SELURUH nomor dokumen (PO, GR, SPK, JE, invoice).
+
+**Gate baru INV-F41** (`scripts/verify_impor_master_template.py`, **22 invarian**, bersih-bersih
+sendiri): template lengkap · baris `#` dilewati · dry-run tidak menulis · 9 bentuk baris cacat
+dilaporkan per baris · tanpa impor separuh · idempoten · FG tertaut model/warna/ukuran · BOM
+memuat aksesoris · karyawan dapat profil payroll · live host bermode gaji bulanan HR · kreator
+tanpa password · katalog tertaut SKU+toko.
+
+`bash scripts/gate.sh --full` → **64 gate · 0 FAIL · VERDICT HIJAU**.
+
+---
+
 # [2026-08-24 #35b] **AUDIT ULANG SESI #35** — 8 cacat ditemukan sendiri & ditutup
 
 Permintaan pemilik: *"recheck kembali development hari ini, doublecheck apakah ada bug atau cacat

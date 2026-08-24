@@ -128,7 +128,27 @@ async def gen_prefixed_number(db, collection: str, field: str, prefix: str,
             upsert=True,
         )
     seq = await next_counter(db, key, namespace='autonum')
-    return f"{prefix}{seq:0{width}d}"
+    number = f"{prefix}{seq:0{width}d}"
+    # ── PENYEMBUHAN DIRI: pencacah bisa TERTINGGAL di belakang dokumen nyata ──
+    # Penyemai/impor yang menulis dokumen bernomor LANGSUNG ke koleksi (tanpa lewat
+    # generator ini) tidak menaikkan pencacah. Lazy-init hanya jalan SEKALI, jadi
+    # setelah itu nomor yang dikeluarkan bisa menabrak nomor yang sudah ada dan
+    # seluruh endpoint balas 500 E11000 (terjadi nyata: pencacah GR di 64 padahal
+    # dokumen sudah sampai GR-00308). Di sini kami periksa tabrakannya, lalu
+    # mendorong pencacah ke angka tertinggi yang benar-benar ada dan mengulang.
+    for _ in range(5):
+        if await db[collection].find_one({field: number}, {'_id': 1}) is None:
+            return number
+        highest = 0
+        async for doc in db[collection].find(
+                {field: {'$regex': f'^{re.escape(prefix)}'}}, {field: 1, '_id': 0}):
+            m = re.search(r'(\d+)\s*$', str(doc.get(field, '')))
+            if m:
+                highest = max(highest, int(m.group(1)))
+        await db.counters.update_one({'_id': key}, {'$max': {'seq': highest}}, upsert=True)
+        seq = await next_counter(db, key, namespace='autonum')
+        number = f"{prefix}{seq:0{width}d}"
+    return number
 
 
 # ─── Format nomor dokumen yang bisa diatur owner ──────────────────────────────
