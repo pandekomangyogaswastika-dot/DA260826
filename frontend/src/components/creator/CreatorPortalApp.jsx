@@ -526,6 +526,102 @@ function SessionInputModal({ token, onClose, onSaved }) {
   );
 }
 
+function CreatorWeeklyCard({ token }) {
+  const [weekEnd, setWeekEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const d = await apiCall(token,
+          `/api/marketing/creator-portal/my-weekly-report?week_end=${weekEnd}`);
+        setData(d);
+      } catch { /* rapor mingguan opsional — jangan matikan halaman performa */ }
+      finally { setLoading(false); }
+    })();
+  }, [token, weekEnd]);
+
+  // Kreator harus bisa membuka pekan yang rapornya DIKIRIM admin, bukan hanya
+  // 7 hari terakhir dari hari ini — kalau tidak, rapor yang diterima lewat email
+  // tidak pernah bisa dicocokkan dengan layar.
+  const shiftWeek = (days) => {
+    const d = new Date(`${weekEnd}T00:00:00`);
+    d.setDate(d.getDate() + days);
+    setWeekEnd(d.toISOString().slice(0, 10));
+  };
+
+  const r = data?.report;
+  const p = data?.period || {};
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-4 space-y-3" data-testid="creator-weekly-card">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs uppercase tracking-wide font-semibold text-teal-600">Rapor Mingguan</h3>
+        <div className="flex items-center gap-1">
+          <button onClick={() => shiftWeek(-7)} data-testid="creator-weekly-prev"
+            className="px-2 py-1 rounded-lg border border-border text-[11px] text-foreground">‹ pekan lalu</button>
+          <button onClick={() => shiftWeek(7)} data-testid="creator-weekly-next"
+            className="px-2 py-1 rounded-lg border border-border text-[11px] text-foreground">pekan depan ›</button>
+        </div>
+      </div>
+      <div className="text-[10px] text-muted-foreground">
+        7 hari bergulir: {p.start || '—'} s/d {p.end || weekEnd}
+      </div>
+
+      {loading || !r ? (
+        <div className="text-xs text-muted-foreground py-2">Memuat rapor…</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {[
+              ['Konten', `${r.contents} (${r.posted} tayang)`],
+              ['Views', fmt(r.views)],
+              ['Engagement', `${fmt(r.engagement)} (${r.engagement_rate}%)`],
+              ['GMV (platform)', fmtRp(r.gmv_kpi)],
+              ['Omzet pesanan', fmtRp(r.order_revenue)],
+              ['Pcs pekan ini', `${r.pcs_week} pcs`],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-lg bg-muted/50 px-3 py-2">
+                <div className="text-[10px] text-muted-foreground">{k}</div>
+                <div className="font-semibold text-foreground">{v}</div>
+              </div>
+            ))}
+          </div>
+          {r.incentive_eligible && (
+            <div className="rounded-lg border border-border px-3 py-2 text-xs">
+              <div className="text-[10px] text-muted-foreground">
+                Insentif periode {r.incentive_period?.start} s/d {r.incentive_period?.end}
+              </div>
+              <div className="text-foreground">
+                {r.pcs_period} pcs{r.target_pcs ? ` / target ${r.target_pcs} pcs (${r.target_progress_pct}%)` : ''}
+                {' · '}<span className="font-semibold">{fmtRp(r.incentive_total)}</span>
+              </div>
+            </div>
+          )}
+          {(r.top_contents || []).length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Konten teratas</div>
+              {r.top_contents.map((c) => (
+                <div key={c.id} className="flex items-center justify-between text-xs gap-2">
+                  <span className="truncate text-foreground">{c.title}</span>
+                  <span className="text-muted-foreground shrink-0">{fmt(c.views)} views</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {(data.data_notes || []).length > 0 && (
+            <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-muted-foreground">
+              {data.data_notes.slice(0, 3).map((n, i) => <li key={i}>{n}</li>)}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PERFORMA
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -564,6 +660,8 @@ function CreatorPerformancePage({ token }) {
         <Calendar size={15} className="text-muted-foreground" />
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground" />
       </div>
+
+      <CreatorWeeklyCard token={token} />
 
       <div className="grid grid-cols-2 gap-3">
         {[

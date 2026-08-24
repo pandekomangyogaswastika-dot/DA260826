@@ -743,6 +743,15 @@ if [ $AUTH_READY -eq 1 ]; then
   run_gate "UANG/DATA — Biaya jahit SPK, HPP batch FIFO, impor pintar, gaji host bulanan (INV-F39)" \
            "python3 scripts/verify_biaya_jahit_hpp_batch_impor_pintar.py"
 
+  # ── INV-F40 (sesi #35) — KPI KONTEN PER KONTEN + RAPOR KREATOR MINGGUAN ─────
+  # Diukur sebelum sesi ini: `POST /content-calendar/{id}/kpi` ada sejak F7.3
+  # tetapi 0 layar memanggilnya ⇒ angka views/engagement/GMV konten hanya bisa
+  # lahir dari penyemai demo; `/performance` tidak punya cara membaca KPI SATU
+  # konten (satuan kerja yang dinilai); insentif dibaca per 3 bulan & performa
+  # per bulan ⇒ kreator baru tahu tertinggal saat periodenya hampir habis.
+  run_gate "DATA — KPI konten per konten/jenis/toko/KOL + rapor kreator mingguan (INV-F40)" \
+           "python3 scripts/verify_kpi_konten_rapor_mingguan.py"
+
 else
   for g in "state machine jurnal" "nomor dokumen kembar" "batas nilai AR/AP" \
            "RBAC/IDOR" "input jahat 4xx" "endpoint kritis" \

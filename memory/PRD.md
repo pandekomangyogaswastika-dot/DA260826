@@ -1176,3 +1176,28 @@ Aturan tetap yang lahir dari sesi ini (jangan dilanggar tanpa keputusan owner ba
   kolom sistem, pilih kolom berkas pengisinya) dan wajib menampilkan **viewer 10 baris isi berkas**.
 - **Pencairan marketplace**: portal Marketing **hanya melihat**; input & jurnal milik Finance.
 - Dijaga gate **INV-F39** (`scripts/verify_biaya_jahit_hpp_batch_impor_pintar.py`).
+
+## Sesi 2026-08-24 (#35) — KPI KONTEN PER KONTEN + RAPOR KREATOR MINGGUAN
+
+Aturan produk yang sekarang berlaku (wajib diingat lintas sesi):
+* **KPI konten dibaca dari SATU layar** (Portal Marketing → Kalender Konten → tab "Performa
+  Konten") dengan 5 sudut pandang: **per konten** (`GET /performance/contents`) · per kreator ·
+  per jenis · per toko · per platform (`GET /performance?group_by=`). Rekap kelompok dan daftar
+  per-konten WAJIB memberi total views yang sama (dijaga INV-F40 A6).
+* **KPI konten diisi MANUAL** oleh staf marketing lewat `POST /content-calendar/{id}/kpi`
+  (dialog `ContentKpiDialog`). **Tanpa `published_url` → 400.** Angka turunan (engagement,
+  eng. rate, CVR, GMV/view, AOV) selalu dihitung SERVER; jangan pernah menyimpan hasil ketikan.
+* **Baris tanpa KPI tidak boleh disembunyikan** — itu daftar kerja. Filter `kpi_state`.
+* **Rapor kreator = 7 hari BERGULIR** (`core/creator_weekly_report.build_report`). Nominal
+  insentif **DIBACA** dari `routes.marketing_kol_incentive._summary` — JANGAN pernah menghitung
+  ulang insentif di rapor (dua angka rupiah = dua kebenaran). GMV KPI platform dan omzet pesanan
+  (`marketing_orders.creator_id`) tetap DUA kolom, tidak pernah dijumlah.
+* **Pengiriman rapor idempoten per (kreator, pekan)**; SMTP kosong ⇒ `skipped_no_smtp` (rapor tetap
+  tersimpan & terbaca kreator), tanpa email portal ⇒ `no_email`. WhatsApp sengaja tidak dipakai
+  (penyedia berbayar).
+* **Portal kreator tetap bebas HPP/margin** — termasuk di rapor mingguan (`my-weekly-report`).
+* ⚠️ **Daftar id hasil penyaringan lingkup toko: `[]` berarti TIDAK ADA yang boleh dilihat, bukan
+  "semua".** `if ids:` pernah membuat staf tanpa lingkup toko melihat seluruh kreator (ditangkap
+  INV-F6RBAC B2-SWEEP). Pakai `ids is not None`.
+* Gate: `scripts/verify_kpi_konten_rapor_mingguan.py` (**INV-F40**, 17 invarian) di `gate.sh`.
+  Total gate: **63**.

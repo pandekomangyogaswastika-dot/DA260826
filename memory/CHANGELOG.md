@@ -1,3 +1,69 @@
+# [2026-08-24 #35] **KPI KONTEN PER KONTEN (input manual)** · **RAPOR KREATOR MINGGUAN**
+
+## Permintaan pemilik
+1. **KPI konten** harus bisa dibaca **per konten / per jenis / per toko / per KOL**; sumber angka
+   views & engagement **diinput manual** staf marketing (impor menyusul bila berkasnya dikirim).
+2. **Rapor kreator mingguan** (sebelumnya ditunda karena WhatsApp butuh penyedia berbayar) —
+   dikerjakan lewat **email SMTP yang sudah ada** + bisa dibaca kreator di portalnya.
+
+## Yang DIUKUR lebih dulu
+| Klaim | Angka nyata sebelum perbaikan |
+|---|---|
+| "KPI konten belum bisa diisi" | `POST /content-calendar/{id}/kpi` ada sejak F7.3 tetapi **0 layar** memanggilnya ⇒ seluruh angka views/engagement/GMV konten hanya bisa lahir dari penyemai demo |
+| "tidak bisa lihat per konten" | `/performance` hanya `group_by=creator\|content_type\|account` — **tidak ada** cara membaca KPI SATU konten (padahal konten itulah satuan yang dinilai) |
+| "rapor mingguan tidak ada" | insentif dibaca per **3 bulan**, performa per **bulan** ⇒ kreator baru tahu tertinggal saat periodenya hampir habis |
+
+## Yang DIKERJAKAN
+* **`GET /api/marketing/content-calendar/performance/contents` (baru)** — satu baris = satu konten,
+  lengkap `kpi` + `kpi_derived` + `kpi_filled`. Filter `kpi_state=all|filled|missing`, `creator_id`,
+  `content_type`, `platform`, dan `sort=views|gmv|engagement|cvr|date`. **Baris tanpa KPI TIDAK
+  disembunyikan** — itu justru daftar kerja yang harus diisi (ditandai kuning di layar).
+* **`group_by=platform`** ditambahkan ke `/performance`, sehingga KPI bisa dibaca per konten ·
+  per jenis · per toko · per platform · per KOL dari SATU layar (`ContentPerformanceView`).
+* **`ContentKpiDialog.jsx` (baru)** — pengisian KPI **manual** dari layar Performa Konten. Angka
+  turunan (engagement, eng. rate, CVR, GMV/view, AOV) **tidak bisa diketik**: ditampilkan sebagai
+  hitungan hidup, yang tersimpan adalah hitungan SERVER. **Tanpa link terbit → ditolak 400**
+  (klien juga menolak) karena angka yang tidak bisa dicek ulang ke platform tidak layak masuk laporan.
+* **`core/creator_weekly_report.py` (baru)** — rapor **7 hari BERGULIR** (sama seperti Rekap
+  Mingguan CMT; pekan ISO membuat rapor Senin pagi berumur satu hari). Per kreator: konten/tayang,
+  views, engagement, pesanan & GMV (KPI platform), **omzet pesanan nyata** (`marketing_orders.creator_id`)
+  **berdampingan dan tidak dijumlah**, pcs pekan ini, rincian per jenis konten, 3 konten teratas,
+  dan **nominal insentif yang DIBACA dari layar insentif** (`marketing_kol_incentive._summary`) —
+  tidak dihitung ulang supaya tidak ada dua angka rupiah.
+* **`routes/marketing_creator_weekly_report.py` (baru)** — `GET /api/marketing/kol/weekly-report`,
+  `POST /weekly-report/send` (**idempoten per (kreator, pekan)**, tombol berubah "Kirim ulang"),
+  `GET /weekly-report/runs`. SMTP belum diisi ⇒ status **`skipped_no_smtp`** + alasannya disebut,
+  rapor TETAP tersimpan dan tetap bisa dibaca kreator — tidak pernah gagal senyap. Kreator tanpa
+  email portal dilaporkan `no_email` (bukan diam-diam dilewati).
+* **Portal kreator** — `GET /api/marketing/creator-portal/my-weekly-report` + kartu **Rapor
+  Mingguan** di halaman Performa dengan **pemilih pekan (‹ pekan lalu / pekan depan ›)** supaya
+  kreator bisa mencocokkan rapor yang dikirim admin. Dihitung dari SATU sumber yang sama dengan
+  layar staf; **tanpa HPP/margin/kredensial** (dijaga gate).
+* **Catatan kejujuran data** ditambah: "Omzet pesanan Rp 0 karena belum ada pesanan ber-kreator
+  pada rentang ini" — supaya kolom Rp 0 tidak dibaca sebagai "kreator tidak menjual".
+* **Bug ikutan yang ditemukan & diperbaiki**: `KOLCreatorModule.jsx` memanggil `loadData()` yang
+  tidak pernah ada saat panel Insentif ditutup (`loadData is not defined`); rentang bawaan layar
+  Performa Konten diubah dari "awal bulan" ke **30 hari bergulir** (dibuka tanggal 1, layar tampak
+  kosong padahal data pekan lalu ada).
+* **Kebocoran lingkup toko (ditangkap gate INV-F6RBAC B2-SWEEP saat sesi ini)**: daftar kosong
+  hasil penyaringan toko sempat dibaca sebagai "tidak menyaring" ⇒ staf tanpa lingkup toko melihat
+  15 kreator sama seperti admin. Sekarang `creator_ids is not None` yang menentukan, `weekly-report`
+  & `/runs` menolak kreator di luar lingkup dengan **403**.
+
+## Gate baru
+**INV-F40** (`scripts/verify_kpi_konten_rapor_mingguan.py`, **17 invarian**, membersihkan datanya
+sendiri): KPI tanpa link ditolak; turunan KPI = hitungan server; semua = belum + sudah (tidak ada
+baris disembunyikan); rekap kelompok & daftar per-konten sepakat pada total views; 5 pengelompokan
+dilayani; pekan = 7 hari bergulir; insentif tidak dihitung ulang; GMV & omzet tetap dua kolom;
+kirim idempoten; SMTP kosong tidak gagal senyap; rapor kreator bebas HPP/margin; kreator tanpa
+konten tetap dilaporkan.
+
+`bash scripts/gate.sh --full` → **63 gate · 0 FAIL · VERDICT HIJAU** ·
+`testing_agent` iteration_91 **10/10 skenario UI LULUS, 0 console error**.
+Data uji dibersihkan (KPI uji dikembalikan, dokumen pengiriman uji dihapus).
+
+---
+
 # [2026-08-23 #34] **BIAYA JAHIT MASUK HPP** · **IMPOR PINTAR** · **PORTAL KREATOR HIDUP** · **HOST DIGAJI BULANAN**
 
 ## Permintaan pemilik

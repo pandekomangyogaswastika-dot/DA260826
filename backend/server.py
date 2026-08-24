@@ -1403,6 +1403,7 @@ from routes.product_costing import router as product_costing_router  # 2026-08-2
 from routes.production_sewing_cost import router as production_sewing_cost_router  # sesi #34: biaya jahit SPK + HPP batch FIFO
 from routes.marketing_kol_incentive import router as marketing_kol_incentive_router  # sesi #34: insentif & tipe kreator
 from routes.rnd_product_viewer import router as rnd_product_viewer_router  # sesi #34: viewer produk final RnD + status SSOT
+from routes.marketing_creator_weekly_report import router as marketing_creator_weekly_report_router  # sesi #35: rapor kreator mingguan
 # FASE 4 (E10 DELETE): rahaza_work_orders & rahaza_execution → routes/_archive/rahaza_multistage/
 from routes.rahaza_inventory import router as rahaza_inventory_router
 from routes.rahaza_attendance import router as rahaza_attendance_router
@@ -1515,6 +1516,7 @@ app.include_router(product_costing_router)  # 2026-08-23: HPP per potong & per m
 app.include_router(production_sewing_cost_router)  # sesi #34: biaya jahit SPK per SKU/pcs + HPP batch FIFO
 app.include_router(marketing_kol_incentive_router)  # sesi #34: insentif kreator per pcs + periode 3 bulan
 app.include_router(rnd_product_viewer_router)  # sesi #34: katalog produk final RnD + status sync marketing/produksi
+app.include_router(marketing_creator_weekly_report_router)  # sesi #35: rapor kreator mingguan (7 hari bergulir)
 # FASE 4: rahaza_work_orders_router & rahaza_execution_router diarsip (E10 DELETE)
 app.include_router(rahaza_inventory_router)
 app.include_router(rahaza_attendance_router)

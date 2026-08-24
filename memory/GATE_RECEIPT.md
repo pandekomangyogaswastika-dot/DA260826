@@ -3,7 +3,7 @@
 > Dihasilkan `scripts/gate.sh`. JANGAN edit manual.
 > "Selesai" hanya sah bila receipt HIJAU untuk cakupan yang TIDAK di-skip.
 
-- **Waktu:** 2026-08-24 02:41:58  ·  **Durasi:** 100s  ·  **Mode:** cepat
+- **Waktu:** 2026-08-24 03:34:35  ·  **Durasi:** 139s  ·  **Mode:** full
 - **Backend:** RUNNING · **Auth:** READY
 
 | Gate | Hasil |
@@ -58,6 +58,7 @@
 | UANG/STOK — Nilai potongan lahir saat dipotong & tak ada potongan yatim (INV-F37) | PASS |
 | UANG/STOK — Belanja mingguan dari ambang, riwayat harga, ambang massal (INV-F38) | PASS |
 | UANG/DATA — Biaya jahit SPK, HPP batch FIFO, impor pintar, gaji host bulanan (INV-F39) | PASS |
+| DATA — KPI konten per konten/jenis/toko/KOL + rapor kreator mingguan (INV-F40) | PASS |
 | FITUR MATI — handler tergabung / kode setelah return | PASS |
 | FITUR MATI — panggilan FE ke endpoint yang tak ada | PASS |
 | NAVIGASI — menu hantu / duplikat / kedalaman | PASS |
@@ -65,6 +66,10 @@
 | DATA/UANG — Form wajib memakai Master, bukan ketikan (INV-F14) | PASS |
 | LAYAR — Kartu punya latar, tulisan terbaca, token tidak berbohong (INV-F15) | PASS |
 | SERAH-TERIMA — mesin lint platform hidup (import validation + oxlint) | PASS |
+| PRODUK — absen (selfie+geofence wajib) | PASS |
+| PRODUK — cuti | PASS |
+| PRODUK — payslip karyawan | PASS |
+| PRODUK — alur lembur live (HRIS) | PASS |
 
 ## ✅ VERDICT: HIJAU — boleh lanjut / klaim selesai (untuk cakupan non-skip).
 

@@ -317,3 +317,27 @@ async def creator_my_kpi(request: Request):
             'viewers_pct': round(total_viewers / kpi['monthly_viewers'] * 100, 1) if kpi.get('monthly_viewers') else None,
         },
     })
+
+
+@router.get('/creator-portal/my-weekly-report')
+async def creator_my_weekly_report(
+    request: Request, week_end: Optional[str] = Query(None, description="YYYY-MM-DD"),
+):
+    """Rapor mingguan kreator (7 hari bergulir) — dibaca kreator sendiri.
+
+    Sengaja dihitung dari SATU sumber yang sama dengan layar staf
+    (`core.creator_weekly_report`) supaya kreator dan staf tidak pernah melihat
+    angka berbeda. Tanpa HPP/margin (keputusan pemilik).
+    """
+    creator = await require_creator_auth(request)
+    db = get_db()
+    from core import creator_weekly_report as wr
+    try:
+        data = await wr.build_report(db, week_end=week_end, creator_ids=[creator['id']],
+                                     include_inactive=True)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    row = (data['rows'] or [{}])[0]
+    row.pop('login_email', None)   # kreator tidak perlu melihat data akunnya di rapor
+    return serialize_doc({'period': data['period'], 'report': row,
+                          'data_notes': data['data_notes']})

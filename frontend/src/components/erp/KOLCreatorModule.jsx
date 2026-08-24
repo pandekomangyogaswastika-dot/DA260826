@@ -10,6 +10,7 @@ import { Users, Video, ShoppingBag, Trophy, Plus, Edit2, Trash2, Check, X, Refre
 import { toast } from 'sonner';
 import PaginationBar from './PaginationBar';
 import CreatorIncentivePanel from './marketing/CreatorIncentivePanel';
+import CreatorWeeklyReportPanel from './marketing/CreatorWeeklyReportPanel';
 import { AccountBadge, getPlatformConfig } from './marketing/AccountBadge';
 import { ActiveAccountBar } from './marketing/ActiveAccountBar';
 import { useActiveMarketingAccount } from '@/hooks/useActiveMarketingAccount';
@@ -653,6 +654,7 @@ export default function KOLCreatorModule({ token }) {
     { id: 'performance', label: 'Performa Live', icon: Video },
     { id: 'catalog', label: 'Katalog & Request', icon: ShoppingBag, badge: pendingRequests.length || null },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
+    { id: 'weekly', label: 'Rapor Mingguan', icon: BarChart2 },
   ];
 
   const { page, setPage, totalPages, total, paged } = useClientPagination(sessions, 10);
@@ -1093,6 +1095,11 @@ export default function KOLCreatorModule({ token }) {
         </div>
       )}
 
+      {/* ═══ TAB: RAPOR MINGGUAN ═══ */}
+      {!loading && tab === 'weekly' && (
+        <CreatorWeeklyReportPanel token={token} />
+      )}
+
       {/* ═══ TAB: LEADERBOARD ═══ */}
       {!loading && tab === 'leaderboard' && (
         <div className="space-y-4">
@@ -1166,7 +1173,7 @@ export default function KOLCreatorModule({ token }) {
       {/* Modals */}
       {incentiveCreator && (
         <CreatorIncentivePanel token={token} creator={incentiveCreator}
-          onClose={() => { setIncentiveCreator(null); loadData(); }} />
+          onClose={() => { setIncentiveCreator(null); load(); }} />
       )}
       {showCreatorForm && (
         <CreatorFormModal

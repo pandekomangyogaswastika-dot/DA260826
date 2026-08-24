@@ -2226,10 +2226,10 @@
   {
    "file": "frontend/src/components/erp/KOLCreatorModule.jsx",
    "name": "KOLCreatorModule.jsx",
-   "lines": 1200,
-   "cards": 0,
-   "grids": 21,
-   "tables": 3,
+   "lines": 1207,
+   "cards": 13,
+   "grids": 23,
+   "tables": 4,
    "th": 5,
    "toggle": false,
    "own": {
@@ -2240,7 +2240,8 @@
     "toggle": false
    },
    "via": [
-    "CreatorIncentivePanel.jsx"
+    "CreatorIncentivePanel.jsx",
+    "CreatorWeeklyReportPanel.jsx"
    ],
    "fields_used": 23,
    "apis": [
@@ -6210,8 +6211,8 @@
    "lines": 717,
    "cards": 39,
    "grids": 11,
-   "tables": 7,
-   "th": 22,
+   "tables": 8,
+   "th": 31,
    "toggle": true,
    "own": {
     "cards": 8,

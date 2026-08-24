@@ -555,7 +555,7 @@ async def content_performance(request: Request,
                               date_from: Optional[str] = Query(None),
                               date_to: Optional[str] = Query(None),
                               group_by: str = Query("creator",
-                                                    description="creator|content_type|account")):
+                                                    description="creator|content_type|account|platform")):
     """Performa konten dikelompokkan — dipakai rapat mingguan & laporan kreator.
 
     **Omzet yang didorong kreator** dibaca dari DUA sumber yang sengaja dipisah:
@@ -587,7 +587,7 @@ async def content_performance(request: Request,
     rows = await db.marketing_content_calendar.find(q, {"_id": 0}).to_list(5000)
 
     key_field = {"creator": "creator_id", "content_type": "content_type",
-                 "account": "account_id"}.get(group_by, "creator_id")
+                 "account": "account_id", "platform": "platform"}.get(group_by, "creator_id")
     creators = {c["id"]: c for c in await db.marketing_kol_creators.find(
         {}, {"_id": 0, "id": 1, "name": 1, "creator_code": 1}).to_list(500)}
     accounts = {a["id"]: a for a in await db.marketing_platform_accounts.find(
@@ -675,16 +675,141 @@ async def content_performance(request: Request,
     }
     totals["kpi_coverage_pct"] = (round(totals["with_kpi"] / totals["contents"] * 100, 2)
                                   if totals["contents"] else 0.0)
+    notes = [
+        "GMV dari KPI konten (angka platform) dan omzet dari pesanan "
+        "(`marketing_orders.creator_id`) ditampilkan BERDAMPINGAN dan tidak "
+        "dijumlah — menjumlahkannya berarti menghitung satu penjualan dua kali.",
+        f"Cakupan KPI {totals['kpi_coverage_pct']}%: hanya konten yang KPI-nya "
+        "sudah diisi yang ikut menghitung views/engagement/GMV.",
+        "Konten berstatus 'posted' wajib punya link terbit — angka tanpa link "
+        "tidak bisa dicek ulang.",
+    ]
+    if totals["contents"] and totals["order_revenue"] == 0:
+        notes.append("Kolom 'Omzet pesanan' Rp 0 karena belum ada pesanan ber-kreator "
+                     "pada rentang ini — bukan berarti tidak ada penjualan; pesanannya "
+                     "belum tertaut ke kreator.")
     return serialize({
         "success": True, "group_by": group_by, "rows": out, "totals": totals,
+        "data_notes": notes,
+    })
+
+
+@router.get("/performance/contents")
+async def content_performance_per_content(
+    request: Request,
+    account_id: Optional[str] = Query(None),
+    creator_id: Optional[str] = Query(None),
+    content_type: Optional[str] = Query(None),
+    platform: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    kpi_state: str = Query("all", description="all|filled|missing"),
+    sort: str = Query("views", description="views|gmv|engagement|cvr|date"),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    """KPI **PER KONTEN** (satu baris = satu konten), bukan rekap kelompok.
+
+    Kenapa terpisah dari `/performance`: rekap per kreator/jenis/toko menjawab
+    "kelompok mana yang menghasilkan", tetapi tidak pernah bisa menjawab
+    "konten MANA yang menghasilkan" — dan konten itulah satuan kerja yang
+    dievaluasi (dan yang KPI-nya diketik staf marketing). Baris tanpa KPI
+    TIDAK disembunyikan: justru itu daftar kerja yang harus diisi.
+    """
+    user = await require_auth(request)
+    db = get_db()
+    q: dict = {}
+    if account_id:
+        await _scope.assert_account_visible(db, user, account_id)
+        q["account_id"] = account_id
+    else:
+        visible = await _scope.visible_account_ids(db, user)
+        if visible is not None:
+            q["account_id"] = {"$in": visible}
+    if creator_id:
+        q["creator_id"] = creator_id
+    if content_type:
+        q["content_type"] = content_type
+    if platform:
+        q["platform"] = platform
+    if date_from or date_to:
+        q["date"] = {}
+        if date_from:
+            q["date"]["$gte"] = date_from
+        if date_to:
+            q["date"]["$lte"] = date_to
+    if kpi_state == "filled":
+        q["kpi_updated_at"] = {"$ne": None, "$exists": True}
+    elif kpi_state == "missing":
+        q["kpi_updated_at"] = {"$in": [None, ""]}
+
+    docs = await db.marketing_content_calendar.find(q, {"_id": 0}).to_list(limit)
+    creators = {c["id"]: c for c in await db.marketing_kol_creators.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "creator_code": 1}).to_list(500)}
+    accounts = {a["id"]: a for a in await db.marketing_platform_accounts.find(
+        {}, {"_id": 0, "id": 1, "account_name": 1}).to_list(300)}
+
+    rows = []
+    for d in docs:
+        kpi = {k: float((d.get("kpi") or {}).get(k) or 0) for k in KPI_KEYS}
+        cr = creators.get(d.get("creator_id") or "", {})
+        rows.append({
+            "id": d.get("id"),
+            "date": d.get("date"),
+            "post_time": d.get("post_time") or "",
+            "title": d.get("title") or "(tanpa judul)",
+            "status": d.get("status"),
+            "platform": d.get("platform") or "",
+            "account_id": d.get("account_id") or "",
+            "account_name": (d.get("account_name")
+                             or accounts.get(d.get("account_id") or "", {}).get("account_name") or ""),
+            "content_type": d.get("content_type") or "",
+            "content_type_label": (d.get("content_type_label")
+                                   or CONTENT_TYPE_LABELS.get(d.get("content_type") or "")
+                                   or (d.get("content_type") or "")),
+            "creator_id": d.get("creator_id") or "",
+            "creator_name": cr.get("name") or "",
+            "creator_code": cr.get("creator_code") or "",
+            "sku": d.get("sku") or "",
+            "published_url": d.get("published_url") or "",
+            "kpi": kpi,
+            "kpi_derived": d.get("kpi_derived") or _kpi_derived(kpi),
+            "kpi_filled": bool(d.get("kpi_updated_at")),
+            "kpi_updated_at": d.get("kpi_updated_at"),
+            "kpi_source": d.get("kpi_source") or "",
+        })
+
+    sort_key = {
+        "views": lambda r: (-r["kpi"]["views"], r["date"] or ""),
+        "gmv": lambda r: (-r["kpi"]["gmv"], r["date"] or ""),
+        "engagement": lambda r: (-float(r["kpi_derived"].get("engagement") or 0), r["date"] or ""),
+        "cvr": lambda r: (-float(r["kpi_derived"].get("cvr") or 0), r["date"] or ""),
+        "date": lambda r: (r["date"] or "",),
+    }.get(sort, lambda r: (-r["kpi"]["views"], r["date"] or ""))
+    rows.sort(key=sort_key, reverse=(sort == "date"))
+
+    filled = [r for r in rows if r["kpi_filled"]]
+    totals = {
+        "contents": len(rows),
+        "posted": sum(1 for r in rows if r["status"] == "posted"),
+        "with_kpi": len(filled),
+        "views": round(sum(r["kpi"]["views"] for r in rows), 2),
+        "engagement": round(sum(float(r["kpi_derived"].get("engagement") or 0) for r in rows), 2),
+        "orders": round(sum(r["kpi"]["orders"] for r in rows), 2),
+        "gmv_kpi": round(sum(r["kpi"]["gmv"] for r in rows), 2),
+    }
+    totals["kpi_coverage_pct"] = (round(len(filled) / len(rows) * 100, 2) if rows else 0.0)
+    totals["engagement_rate"] = (round(totals["engagement"] / totals["views"] * 100, 2)
+                                 if totals["views"] > 0 else 0.0)
+    return serialize({
+        "success": True, "rows": rows, "totals": totals,
+        "kpi_keys": list(KPI_KEYS),
         "data_notes": [
-            "GMV dari KPI konten (angka platform) dan omzet dari pesanan "
-            "(`marketing_orders.creator_id`) ditampilkan BERDAMPINGAN dan tidak "
-            "dijumlah — menjumlahkannya berarti menghitung satu penjualan dua kali.",
-            f"Cakupan KPI {totals['kpi_coverage_pct']}%: hanya konten yang KPI-nya "
-            "sudah diisi yang ikut menghitung views/engagement/GMV.",
-            "Konten berstatus 'posted' wajib punya link terbit — angka tanpa link "
-            "tidak bisa dicek ulang.",
+            f"{len(rows) - len(filled)} dari {len(rows)} konten BELUM punya KPI — "
+            "angka rekap hanya mewakili konten yang sudah diisi.",
+            "KPI hanya bisa diisi untuk konten yang punya link terbit; tanpa link, "
+            "angkanya tidak bisa dicek ulang ke platform.",
+            "Angka turunan (engagement, eng. rate, CVR, GMV/view, AOV) DIHITUNG "
+            "sistem — tidak pernah diketik.",
         ],
     })
 
