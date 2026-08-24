@@ -44,6 +44,7 @@ async def list_products(request: Request,
                         q: str = Query("", description="cari SKU / nama / model"),
                         category: str = Query(""),
                         sync: str = Query("", description="synced | not_synced"),
+                        sort: str = Query("", description="margin_asc | margin_desc"),
                         limit: int = Query(60, ge=1, le=200),
                         offset: int = Query(0, ge=0)):
     """Katalog produk final RnD + status sambungannya ke marketing & produksi."""
@@ -193,6 +194,22 @@ async def list_products(request: Request,
             "ssot_ok": not gaps,
         })
 
+    # PAPAN MARGIN (sesi #34) — urut dari margin PALING TIPIS supaya produk yang
+    # merugikan muncul lebih dulu. Produk yang harga jual atau HPP-nya belum ada
+    # TIDAK dianggap bermargin 0 (itu akan menutupi masalahnya); ia ditaruh di
+    # akhir dengan sebab yang sudah tertulis di `gaps`.
+    if sort in ("margin_asc", "margin_desc"):
+        def _key(r):
+            sell = r["price"]["selling"]
+            hpp = r["hpp"]["fifo_avg"] or r["hpp"]["master"]
+            known = bool(sell) and bool(hpp)
+            return (0 if known else 1, r["price"]["margin"] if known else 0)
+        out.sort(key=_key, reverse=(sort == "margin_desc"))
+        if sort == "margin_desc":
+            out.sort(key=lambda r: 0 if (r["price"]["selling"] and
+                                         (r["hpp"]["fifo_avg"] or r["hpp"]["master"])) else 1)
+
+    priced = [r for r in out if r["price"]["selling"] and (r["hpp"]["fifo_avg"] or r["hpp"]["master"])]
     return {
         "ok": True, "total": total, "data": serialize_doc(out),
         "summary": {
@@ -202,6 +219,15 @@ async def list_products(request: Request,
             "never_produced": sum(1 for r in out if not r["production"]["qty_ordered"]),
             "hpp_real": sum(1 for r in out if r["hpp"]["layer_count"] > 0),
             "ssot_ok": sum(1 for r in out if r["ssot_ok"]),
+            # Papan margin: hanya dihitung dari produk yang HPP **dan** harga jualnya
+            # sama-sama ada — sisanya disebut apa adanya, bukan dianggap margin 0.
+            "margin_measurable": len(priced),
+            "margin_unmeasurable": len(out) - len(priced),
+            "margin_negative": sum(1 for r in priced if r["price"]["margin"] < 0),
+            "margin_thin": sum(1 for r in priced
+                               if 0 <= r["price"]["margin"] < 0.15 * r["price"]["selling"]),
+            "margin_avg_pct": (round(sum(r["price"]["margin"] / r["price"]["selling"] * 100
+                                         for r in priced) / len(priced), 1) if priced else 0.0),
         },
     }
 

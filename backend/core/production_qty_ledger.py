@@ -641,7 +641,35 @@ async def issue_fg(db, *, material_id: str, qty: int, ref: dict,
                                   ref=ref, actor=actor, db=db)
         issued.append({"location_id": r["location_id"], "qty": take})
         left -= take
-    return {"issued": issued, "qty": qty - left}
+    out = {"issued": issued, "qty": qty - left}
+    # ── SESI #34 (lanjutan) — BIAYA IKUT KELUAR BERSAMA BARANGNYA ─────────────
+    # Lapisan HPP batch (FIFO) dibentuk saat barang jadi MASUK gudang
+    # (`post_fg_accepted`). Kalau keluarnya tidak memakan lapisan, `qty_remaining`
+    # tidak pernah berkurang ⇒ `hpp_fifo_avg` (angka margin di Katalog Marketing)
+    # membeku pada batch-batch lama yang barangnya SUDAH TERJUAL, dan HPP tidak
+    # akan pernah mengikuti kenaikan harga kain. Di sini lapisan tertua dimakan
+    # sebanyak barang yang keluar, dan HPP hasilnya ditulis ulang ke master.
+    #
+    # Barang tetap boleh keluar walau biayanya gagal dihitung (stok fisik adalah
+    # kebenaran gudang), tetapi kekurangannya DILAPORKAN: `uncosted_qty` > 0
+    # berarti ada barang keluar tanpa lapisan biaya — itu tanda batch masuknya
+    # belum pernah punya HPP, bukan tanda semuanya beres.
+    try:
+        from core import fg_cost_layers as fcl
+        cogs = await fcl.consume_fifo(db, material_id=material_id, qty=out["qty"],
+                                      ref=ref, actor=actor)
+        out["cogs"] = cogs.get("cogs", 0.0)
+        out["cogs_layers"] = cogs.get("layers_used") or []
+        out["uncosted_qty"] = cogs.get("uncosted_qty", 0)
+        if out["uncosted_qty"]:
+            logger.warning(
+                "[qty_ledger] %s pcs FG keluar TANPA lapisan biaya (material=%s sku=%s ref=%s) "
+                "— HPP batch untuk qty ini tidak diketahui; periksa apakah batch masuknya "
+                "punya biaya jahit & BOM", out["uncosted_qty"], material_id, sku, ref)
+    except Exception:  # noqa: BLE001
+        logger.exception("[qty_ledger] konsumsi lapisan HPP batch gagal "
+                         "(material=%s qty=%s)", material_id, out["qty"])
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────

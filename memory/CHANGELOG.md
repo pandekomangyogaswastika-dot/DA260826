@@ -105,6 +105,26 @@ identitasnya mustahil dipulihkan.
 * **Belum dikerjakan atas permintaan pemilik ("skip dulu")**: impor berkas pencairan (berkas asli
   belum dikirim) dan rapor kreator mingguan via WhatsApp (butuh penyedia berbayar + nomor tujuan).
 
+## Tambahan sesi #34 (permintaan pemilik: "lanjutkan ke fitur dulu, soal data di akhir")
+* **BIAYA IKUT KELUAR BERSAMA BARANGNYA (FIFO keluar).** `core.production_qty_ledger.issue_fg` —
+  satu-satunya pintu barang jadi KELUAR (dipakai `buyer_shipment` scan-out & pemenuhan) — sekarang
+  memanggil `fg_cost_layers.consume_fifo()`. Kenapa penting: tanpa ini `qty_remaining` lapisan tidak
+  pernah berkurang, jadi `hpp_fifo_avg` **membeku pada batch yang barangnya sudah terjual** dan HPP
+  tidak akan pernah mengikuti kenaikan harga kain. Terbukti dengan uji terkontrol (self-cleaning):
+  2 batch masuk (100 pcs HPP 15.000 + 100 pcs HPP 19.000) ⇒ `hpp_fifo_avg` 17.000; keluar 100 pcs
+  ⇒ **lapisan TERTUA yang dimakan** (COGS 1.500.000 @15.000) dan `hpp_fifo_avg` bergerak ke 19.000.
+  COGS + lapisan terpakai + `uncosted_qty` disimpan di baris pengiriman (`fg_cogs`,
+  `fg_cogs_layers`, `fg_cogs_uncosted_qty`). **Barang tetap boleh keluar** walau biayanya gagal
+  dihitung (stok fisik adalah kebenaran gudang), tetapi `uncosted_qty > 0` **dilaporkan** — itu tanda
+  batch masuknya belum punya HPP, bukan tanda semuanya beres.
+* **PAPAN MARGIN di layar Produk Final RnD** — urut **margin paling tipis dulu**, kartu KPI margin
+  rata-rata + jumlah produk **margin tipis/minus**, dan margin per kartu (merah minus, kuning <15%,
+  hijau sehat). Produk yang HPP **atau** harga jualnya belum ada **TIDAK dihitung bermargin 0** —
+  jumlahnya disebut terpisah ("54 produk belum bisa dihitung"), supaya papan ini tidak menyamarkan
+  data yang belum ada. Keadaan hari ini: margin rata-rata **57%** dari 6 produk yang lengkap.
+* Gate **INV-F39** kini **27 invarian** (tambahan **B3**: tiap dokumen konsumsi lapisan wajib
+  memakan lapisan tertua lebih dulu dan qty-nya utuh — Σ lapisan + `uncosted_qty` == qty keluar).
+
 ---
 
 # [2026-08-23 #32] **NILAI POTONGAN LAHIR SAAT DIPOTONG** · **POTONGAN YATIM PUNYA PENJAGA & PEMBERSIH**

@@ -256,6 +256,42 @@ def main() -> int:  # noqa: C901
         else:
             ok("B2", "setiap lapisan menyimpan rincian (bahan/jahit/permak/internal) + kekurangannya")
 
+    # ── B3 — BIAYA IKUT KELUAR BERSAMA BARANGNYA (FIFO keluar) ────────────────
+    # Kalau barang jadi keluar tanpa memakan lapisan, `hpp_fifo_avg` membeku pada
+    # batch yang barangnya SUDAH TERJUAL ⇒ margin Katalog Marketing memakai biaya
+    # kain lama selamanya. Yang diperiksa: tiap dokumen konsumsi harus (a) memakan
+    # lapisan TERTUA lebih dulu, dan (b) qty-nya utuh (Σ lapisan + uncosted == qty).
+    cons = list(db.fg_cost_consumptions.find({}, {"_id": 0}).sort("created_at", -1).limit(50))
+    if not cons:
+        ok("B3", "belum ada barang jadi keluar yang memakan lapisan biaya",
+           "pintu keluar (core.production_qty_ledger.issue_fg) sudah memanggil consume_fifo; "
+           "angkanya akan muncul begitu ada pengiriman/penjualan")
+    else:
+        broken_qty = [c for c in cons
+                      if abs(sum(l["qty"] for l in (c.get("layers_used") or []))
+                             + (c.get("uncosted_qty") or 0) - (c.get("qty") or 0)) > 0.001]
+        order_bad = []
+        for c in cons:
+            used = c.get("layers_used") or []
+            if len(used) < 2:
+                continue
+            ids = [l["layer_id"] for l in used]
+            stamps = {l["id"]: l.get("created_at") for l in
+                      db.fg_cost_layers.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "created_at": 1})}
+            seq = [stamps.get(i) for i in ids if stamps.get(i)]
+            if seq != sorted(seq):
+                order_bad.append(c["id"])
+        if broken_qty:
+            bad("B3", f"{len(broken_qty)} dokumen konsumsi qty-nya tidak utuh — "
+                      "ada barang keluar yang biayanya hilang tanpa jejak")
+        elif order_bad:
+            bad("B3", f"{len(order_bad)} dokumen memakan lapisan TIDAK dari yang tertua (bukan FIFO)")
+        else:
+            uncosted = sum(c.get("uncosted_qty") or 0 for c in cons)
+            ok("B3", f"{len(cons)} pengeluaran memakan lapisan tertua lebih dulu (FIFO) dan qty-nya utuh"
+                     + (f" · {uncosted} pcs keluar TANPA lapisan biaya — dilaporkan, tidak ditutup"
+                        if uncosted else ""))
+
     # ══ C. PORTAL KREATOR ═════════════════════════════════════════════════════
     head("C — PORTAL KREATOR: bisa login, katalog terisi, TIDAK ADA HPP")
     cre = db.marketing_kol_creators.find_one({"login_email": {"$nin": [None, ""]}},

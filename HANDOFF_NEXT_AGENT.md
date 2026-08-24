@@ -47,8 +47,10 @@ Seluruh suite: `bash scripts/gate.sh` → **62 gate · VERDICT HIJAU**.
    (INV-F30/V15, INV-F31/R9) memang mendeteksi sampah semacam itu.
 
 ## Yang BELUM dikerjakan (baca `plan.md` bagian "PR berikutnya")
-`consume_fifo()` belum dipasang di pintu barang jadi KELUAR (pengiriman/penjualan) — jadi lapisan
-FIFO belum berkurang otomatis saat stok terjual. Ini pekerjaan pertama yang paling bernilai.
+FIFO keluar **sudah dipasang** (`production_qty_ledger.issue_fg` memakan lapisan tertua; gate B3
+mengikatnya). Yang tersisa & paling bernilai: **sambungkan `fg_cogs` (COGS FIFO per pengiriman) ke
+jurnal COGS** — angkanya sudah tersimpan di baris pengiriman tetapi jurnalnya masih memakai dasar
+biaya lama. Sisanya pekerjaan DATA (BOM kosong, 3 SKU SPK tanpa master) yang pemilik minta ditunda.
 
 ---
 

@@ -41,16 +41,21 @@ Status: **SELESAI & HIJAU** · `bash scripts/gate.sh` → **62 gate · VERDICT H
 - **Ditunda atas permintaan pemilik**: impor berkas pencairan (menunggu berkas asli) dan rapor
   kreator mingguan via WhatsApp (menunggu keputusan penyedia + nomor tujuan).
 
+## Sudah selesai sesudah itu (fitur dulu, atas permintaan pemilik)
+- **FIFO keluar dipasang** di `production_qty_ledger.issue_fg` (pintu barang jadi keluar) — lapisan
+  tertua dimakan lebih dulu, COGS & `uncosted_qty` tercatat di baris pengiriman. Gate B3 mengikatnya.
+- **Papan margin** di layar Produk Final RnD (urut margin tipis dulu + KPI margin + warna per kartu),
+  dengan produk yang belum bisa dihitung disebut terpisah.
+
 ## PR berikutnya (belum dikerjakan — sengaja, bukan lupa)
-0. **Buat master untuk 3 SKU SPK yang belum ada** (`ARN-HD-L`, `ARN-PL-M`, `ARN-PL-L`) di Master
+0. **[DATA] Buat master untuk 3 SKU SPK yang belum ada** (`ARN-HD-L`, `ARN-PL-M`, `ARN-PL-L`) di Master
    Produk/RnD, lalu tautkan lewat layar Biaya Jahit — sesudah itu Rp 3,6 juta ongkos jahit punya
    jalan ke HPP.
-1. **Konsumsi FIFO saat barang jadi KELUAR belum dipasang di pintu penjualan.**
-   `core/fg_cost_layers.consume_fifo()` sudah ada & diuji, tetapi belum dipanggil dari alur
-   pengiriman/penjualan. Akibat hari ini: `qty_remaining` lapisan hanya berkurang bila dipanggil
-   manual, jadi `hpp_fifo_avg` belum bergerak saat stok terjual. **Pintu yang harus dipasangi:**
-   `routes/buyer_shipment.py` (dispatch) dan alur pemenuhan pesanan marketplace.
-2. **HPP batch masih Rp 0 untuk hampir semua SKU** karena BOM & tarif jahit historis belum lengkap
+1. **Sambungkan COGS FIFO ke jurnal.** `routes/buyer_shipment.post_cogs_shipment` masih memakai
+   dasar biaya lamanya; angka FIFO (`fg_cogs`) sudah tersimpan di baris pengiriman tetapi belum
+   menjadi nilai jurnal COGS. Sesudah itu, laba per pengiriman = harga jual − biaya batch yang
+   benar-benar keluar.
+2. **[DATA] HPP batch masih Rp 0 untuk hampir semua SKU** karena BOM & tarif jahit historis belum lengkap
    (viewer RnD melaporkannya apa adanya: 20 dari 20 produk yang dilihat menyebut kekurangan).
    Ini pekerjaan **DATA**, bukan kode: isi BOM per model + tarif jahit per SPK berjalan.
 3. **KPI konten per-konten** sudah ada di backend (`/api/marketing/content-calendar/performance`

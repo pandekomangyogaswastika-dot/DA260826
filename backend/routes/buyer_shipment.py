@@ -425,7 +425,14 @@ async def _issue_fg_for_dispatch(db, shipment: dict, items: list, user: dict) ->
             out['warnings'].append(f"Stok FG {sku} gagal dikurangi: {e}")
             continue
         await db.buyer_shipment_items.update_one({'id': it['id']}, {'$set': {
-            'fg_issued_at': now(), 'fg_issued_qty': qty, 'fg_material_id': mat['id']}})
+            'fg_issued_at': now(), 'fg_issued_qty': qty, 'fg_material_id': mat['id'],
+            # SESI #34 — biaya batch (FIFO) yang IKUT keluar bersama barangnya.
+            # `fg_cogs_uncosted_qty` > 0 berarti sebagian barang keluar tanpa
+            # lapisan biaya (batch masuknya belum punya HPP) — angka itu tidak
+            # boleh ditutup, karena ia menjelaskan kenapa HPP terlihat murah.
+            'fg_cogs': res.get('cogs', 0.0),
+            'fg_cogs_layers': res.get('cogs_layers') or [],
+            'fg_cogs_uncosted_qty': res.get('uncosted_qty', 0)}})
         it['fg_issued_at'] = now()
         await db.rahaza_fg_movements.insert_one({
             'id': new_id(), 'sku_code': sku, 'movement_type': 'OUT', 'qty': qty,
@@ -437,6 +444,8 @@ async def _issue_fg_for_dispatch(db, shipment: dict, items: list, user: dict) ->
             'shipment_item_id': it.get('id'),
             'notes': (f"Kirim ke buyer {shipment.get('customer_name') or ''} — SJ "
                       f"{shipment.get('shipment_number')} dispatch #{it.get('dispatch_seq')}"),
+            'cogs_fifo': res.get('cogs', 0.0),
+            'cogs_uncosted_qty': res.get('uncosted_qty', 0),
             'created_by': user.get('name', ''), 'created_at': now()})
         out['issued'].append({'sku': sku, 'qty': qty, 'rows': res.get('issued')})
     return out

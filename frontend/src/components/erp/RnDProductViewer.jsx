@@ -27,19 +27,23 @@ export default function RnDProductViewer() {
   const [summary, setSummary] = useState(null);
   const [q, setQ] = useState('');
   const [onlyBroken, setOnlyBroken] = useState(false);
+  // SESI #34 — papan margin: produk paling tipis/merugi muncul lebih dulu.
+  // Produk yang HPP atau harga jualnya belum ada TIDAK dihitung bermargin 0
+  // (itu menutupi masalahnya) — jumlahnya disebut terpisah.
+  const [sort, setSort] = useState('');
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const d = await apiGet(`/rnd/product-viewer?limit=60${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+      const d = await apiGet(`/rnd/product-viewer?limit=60${q ? `&q=${encodeURIComponent(q)}` : ''}${sort ? `&sort=${sort}` : ''}`);
       setRows(d?.data || []);
       setSummary(d?.summary || null);
     } catch (e) {
       toast.error(e.message || 'Gagal memuat produk RnD');
     } finally { setLoading(false); }
-  }, [q]);
+  }, [q, sort]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -73,6 +77,12 @@ export default function RnDProductViewer() {
               onChange={(e) => setQ(e.target.value)} placeholder="cari SKU / nama / model…"
               className="bg-transparent py-2 text-sm outline-none w-56" />
           </div>
+          <select data-testid="rnd-viewer-sort" value={sort} onChange={(e) => setSort(e.target.value)}
+            className="h-9 bg-foreground/5 border border-foreground/10 rounded-lg px-2 text-sm">
+            <option value="">Urut: nama model</option>
+            <option value="margin_asc">Urut: margin paling tipis dulu</option>
+            <option value="margin_desc">Urut: margin paling tebal dulu</option>
+          </select>
           <label className="flex items-center gap-1.5 text-xs text-foreground/60">
             <input data-testid="rnd-viewer-only-broken" type="checkbox" checked={onlyBroken}
               onChange={(e) => setOnlyBroken(e.target.checked)} />
@@ -95,6 +105,13 @@ export default function RnDProductViewer() {
           <Kpi testId="rnd-kpi-nobom" label="Tanpa BOM" value={summary.no_bom} tone="warn" />
           <Kpi testId="rnd-kpi-ssot" label="Lengkap (SSOT OK)" value={summary.ssot_ok}
             tone={summary.ssot_ok ? 'good' : 'warn'} />
+          <Kpi testId="rnd-kpi-margin" label="Margin rata-rata"
+            value={`${summary.margin_avg_pct || 0}%`}
+            hint={`dari ${summary.margin_measurable || 0} produk yang HPP & harganya ada`} />
+          <Kpi testId="rnd-kpi-margin-risk" label="Margin tipis / minus"
+            value={`${(summary.margin_thin || 0) + (summary.margin_negative || 0)}`}
+            tone={(summary.margin_negative || 0) ? 'warn' : 'good'}
+            hint={`${summary.margin_unmeasurable || 0} produk belum bisa dihitung`} />
         </div>
       ) : null}
 
@@ -129,6 +146,17 @@ export default function RnDProductViewer() {
                       <>
                         <span className="text-foreground/50"> · jual </span>
                         <b>{rp(r.price.selling)}</b>
+                        {(r.hpp.fifo_avg || r.hpp.master) ? (
+                          <span className={r.price.margin < 0
+                            ? 'text-red-600 dark:text-red-400'
+                            : (r.price.margin < 0.15 * r.price.selling
+                              ? 'text-amber-600 dark:text-amber-300'
+                              : 'text-emerald-600 dark:text-emerald-300')}
+                            data-testid={`rnd-margin-${r.sku}`}>
+                            {' '}· margin {rp(r.price.margin)}
+                            {` (${Math.round(r.price.margin / r.price.selling * 100)}%)`}
+                          </span>
+                        ) : null}
                       </>
                     ) : null}
                   </div>
