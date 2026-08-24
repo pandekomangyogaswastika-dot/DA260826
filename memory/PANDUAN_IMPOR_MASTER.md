@@ -35,6 +35,17 @@ Yang sudah **terbukti** di sistem ini (bukan teori):
 **Aksesoris (07) bukan pelengkap** — ia punya master sendiri dan **ikut masuk BOM** persis
 seperti kain, karena kancing/label/hangtag adalah bagian nyata dari HPP.
 
+## 2b. Unduh berkasnya
+
+| Berkas | Tautan (preview) | Isi |
+|---|---|---|
+| Template kosong | `/downloads/TEMPLATE_MASTER_DA.xlsx` | 16 sheet siap diisi + PETUNJUK + DAFTAR_PILIHAN |
+| Contoh terisi | `/downloads/CONTOH_TERISI_MASTER_DA.xlsx` | 59 baris contoh saling tertaut (kode berawalan `CTH-`) |
+
+Sumbernya juga ada di repo: `data_import/` (dibuat ulang kapan pun dengan
+`scripts/master_template_generate.py` dan `scripts/master_template_example.py`).
+Berkas contoh **dijaga gate INV-F41 C2**: ia wajib selalu lolos importirnya sendiri.
+
 ## 3. Langkah kerja
 
 ```bash

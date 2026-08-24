@@ -180,6 +180,27 @@ async def main() -> int:  # noqa: C901
         else:
             bad("C1", f"dry-run menulis {n_before} dokumen — mode periksa tidak aman")
 
+        # Contoh yang dibagikan ke pemilik WAJIB bisa diimpor. Contoh yang ditolak
+        # importir lebih buruk daripada tidak ada contoh: pemakai akan menyalin pola
+        # yang salah lalu menyalahkan sistemnya.
+        cth = Path(f"/tmp/contoh_{TAG}.xlsx")
+        p = subprocess.run([sys.executable, str(ROOT / "scripts" / "master_template_example.py"),
+                            str(cth)], capture_output=True, text=True, timeout=120)
+        pc = subprocess.run([sys.executable,
+                             str(ROOT / "scripts" / "import_master_template.py"), str(cth)],
+                            capture_output=True, text=True, timeout=300)
+        if p.returncode == 0 and pc.returncode == 0 and "PEMERIKSAAN BERSIH" in pc.stdout:
+            ok("C2", "berkas CONTOH TERISI yang dibagikan ke pemilik lolos pemeriksaan "
+                     "importir tanpa satu pun kesalahan")
+        else:
+            bad("C2", "contoh terisi TIDAK lolos importirnya sendiri",
+                (pc.stdout + pc.stderr)[-700:])
+        if await count_tag() != 0:
+            bad("C3", "memeriksa berkas contoh ikut menulis ke basis data")
+        else:
+            ok("C3", "memeriksa berkas contoh tidak meninggalkan dokumen apa pun")
+        cth.unlink(missing_ok=True)
+
         # ══ B. BARIS CACAT ════════════════════════════════════════════════════
         head("B — BARIS CACAT: dilaporkan per baris, dan TIDAK ADA yang tersimpan")
         build_workbook(with_errors=True)
