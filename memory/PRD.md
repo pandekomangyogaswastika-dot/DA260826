@@ -1225,3 +1225,27 @@ Aturan produk yang sekarang berlaku (wajib diingat lintas sesi):
   (deteksi tabrakan → dorong pencacah ke max nyata → ulang). Jangan pernah membuat generator
   nomor kedua.
 * Gate: INV-F41 (22 invarian). Total gate: **64**.
+
+## Sesi 2026-08-24 (#36b) — AUDIT PERMINTAAN AWAL + keputusan untuk sesi #37
+
+Hasil audit (bukti angka, bukan klaim):
+* **RnD logikanya BENAR** — diuji e2e: style→varian→approve→promote menghasilkan SKU kanonik
+  `MODEL-WARNA-UKURAN`, FG tertaut model/ukuran/warna, `rahaza_model_variants` terbentuk,
+  `rnd_style_id` terbaca viewer. Idempoten, kode kembar ditolak 409. Yang kosong hanya DATA
+  (styles 0, BOM 2, seed usang) — pemilik menyatakan itu tidak masalah.
+* Viewer RnD mengembalikan kunci **`data`** (bukan `rows`).
+* Sudah benar: biaya jahit SPK · anggaran 7 hari · impor pintar · portal KOL tanpa HPP ·
+  livehost bulanan · KPI konten. Belum: **pencairan (tidak ada form)** & **margin katalog**.
+* HPP Rp 0 di 318 FG karena `po_items` tidak tertaut master (7/7 tanpa `material_id`) dan BOM
+  hampir kosong — akibat seed usang, bukan rumus salah.
+
+Keputusan pemilik untuk sesi #37 (detail: `memory/HANDOFF_SESI_37.md`):
+1. Form pencairan **di Portal Finance**; Marketing baca-saja.
+2. Pencairan dicocokkan ke omzet periode + **selisih disebut**, dan **membuat jurnal** kas masuk +
+   potongan platform. ⚠️ **OMZET TIDAK PERNAH MASUK GL — hanya pencairan.**
+   ⚠️ Jurnal WAJIB memakai **COA milik akun toko** (`marketing_accounts`: `coa_cash_code`,
+   `coa_revenue_code`, `coa_receivable_code`), bukan peta COA global di `marketing_settlements.py`.
+3. Sinkron RnD → katalog marketing tetap **manual** (tidak diubah).
+4. **Margin dihitung otomatis**; bila HPP tidak diketahui tampilkan "belum bisa diukur", bukan 0%.
+5. Impor **22 jenis → ±6 kelompok** (jenis lama tetap diterima, hanya disembunyikan/deprecated).
+6. 6 kolom harga katalog **by design** untuk pencatatan RnD — jangan disatukan.
